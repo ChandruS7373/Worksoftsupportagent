@@ -10,7 +10,6 @@ from datetime import datetime
 import streamlit as st
 
 sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
-import auth
 import support_db
 
 # ═══════════════════════════════════════════════════════════
@@ -394,12 +393,6 @@ def sf_create_case(subject, description, user_name, user_email, priority="High")
 # EMAIL
 # ═══════════════════════════════════════════════════════════
 def _smtp_creds():
-    try:
-        cfg = auth.get_email_settings()
-        if cfg["outlook_email"] and cfg["outlook_password"]:
-            return cfg["outlook_email"], cfg["outlook_password"]
-    except Exception:
-        pass
     return _secret("OUTLOOK_EMAIL"), _secret("OUTLOOK_PASSWORD")
 
 

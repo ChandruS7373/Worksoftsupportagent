@@ -6,9 +6,24 @@ import smtplib
 from email.mime.multipart import MIMEMultipart
 from email.mime.text import MIMEText
 from datetime import datetime
+from html.parser import HTMLParser
 import streamlit as st
 
 import support_db
+
+
+def _strip_html(html: str) -> str:
+    """Strip HTML tags and decode entities from Salesforce rich-text fields."""
+    class _S(HTMLParser):
+        def __init__(self):
+            super().__init__()
+            self.parts = []
+        def handle_data(self, d):
+            self.parts.append(d)
+    p = _S()
+    p.feed(html or "")
+    return re.sub(r"\s+", " ", "".join(p.parts)).strip()
+
 
 # ═══════════════════════════════════════════════════════════
 # CONFIGURATION
@@ -34,7 +49,7 @@ st.set_page_config(
     page_title="Worksoft Support | Qualesce",
     page_icon="🤖",
     layout="centered",
-    initial_sidebar_state="collapsed",
+    initial_sidebar_state="expanded",
 )
 
 # ═══════════════════════════════════════════════════════════
@@ -327,16 +342,20 @@ div[data-testid="stFileUploader"] [data-testid="stFileUploaderFile"]{
 # ═══════════════════════════════════════════════════════════
 def _init_state():
     defaults = {
-        "page":          "chat",
-        "user":          None,
-        "messages":      [],
-        "issue_text":    "",
-        "sf_ticket":     None,
-        "fu_key":        0,
-        "pending_file":  None,
-        "session_id":    None,
-        "sf_resolution":    "",
-        "sf_case_context":  "",
+        "page":            "chat",
+        "user":            None,
+        "messages":        [],
+        "issue_text":      "",
+        "sf_ticket":       None,
+        "fu_key":          0,
+        "pending_file":    None,
+        "session_id":      None,
+        "sf_resolution":   "",
+        "sf_case_context": "",
+        "sf_steps":        [],
+        "sf_step_idx":     0,
+        "chat_phase":      "idle",
+        "initial_issue":   "",
     }
     for k, v in defaults.items():
         if k not in st.session_state:
@@ -344,6 +363,7 @@ def _init_state():
 
 support_db.init_db()
 _init_state()
+
 
 # ═══════════════════════════════════════════════════════════
 # SALESFORCE
@@ -513,68 +533,162 @@ def sync_sf_knowledge() -> tuple[bool, str]:
         conn.commit()
         conn.close()
 
-        result = sf.query_all(
-            "SELECT Id, CaseNumber, Subject, Description, Status "
-            "FROM Case WHERE Status != 'Closed' "
-            "ORDER BY LastModifiedDate DESC LIMIT 500"
-        )
-        cases = result.get("records", [])
-        if not cases:
-            return False, "No open cases found in Salesforce."
+        # Try progressively simpler queries until one succeeds.
+        # Using a CaseComments subquery fetches all comments in one API call
+        # instead of one per case, which avoids rate limits and permission gaps.
+        # Extra structured fields (Type, Reason, Priority, etc.) are included so
+        # cases with no Description/Comments still have searchable content.
+        cases            = None
+        use_cc_subquery  = False
+        _EXTRA = "Type, Reason, Origin, Priority, Product__c, SLAViolation__c, EngineeringReqNumber__c, PotentialLiability__c"
+        _QUERIES = [
+            (True,  f"SELECT Id, CaseNumber, Subject, Description, Status, Resolution__c, Comments, {_EXTRA}, "
+                    "(SELECT CommentBody, CreatedDate FROM CaseComments ORDER BY CreatedDate ASC) "
+                    "FROM Case ORDER BY LastModifiedDate DESC LIMIT 1000"),
+            (True,  f"SELECT Id, CaseNumber, Subject, Description, Status, {_EXTRA}, "
+                    "(SELECT CommentBody, CreatedDate FROM CaseComments ORDER BY CreatedDate ASC) "
+                    "FROM Case ORDER BY LastModifiedDate DESC LIMIT 1000"),
+            (True,  "SELECT Id, CaseNumber, Subject, Description, Status, Type, Reason, Origin, Priority, "
+                    "(SELECT CommentBody, CreatedDate FROM CaseComments ORDER BY CreatedDate ASC) "
+                    "FROM Case ORDER BY LastModifiedDate DESC LIMIT 1000"),
+            (False, "SELECT Id, CaseNumber, Subject, Description, Status, Type, Reason, Origin, Priority "
+                    "FROM Case ORDER BY LastModifiedDate DESC LIMIT 1000"),
+            (False, "SELECT Id, CaseNumber, Subject, Description, Status "
+                    "FROM Case ORDER BY LastModifiedDate DESC LIMIT 1000"),
+        ]
+        for _has_sub, _q in _QUERIES:
+            try:
+                _r = sf.query_all(_q)
+                cases           = _r.get("records", [])
+                use_cc_subquery = _has_sub
+                break
+            except Exception:
+                continue
 
-        synced = 0
-        active_ids = []
+        if cases is None:
+            return False, "❌ Sync failed: All Salesforce queries failed. Check API credentials and field permissions."
+
+        if not cases:
+            return False, "No cases found in Salesforce."
+
+        synced        = 0
+        empty_content = 0
+        errors        = []
+        active_ids    = []
+
         for case in cases:
             cid         = case["Id"]
             case_number = case.get("CaseNumber", "")
-            subject     = case.get("Subject", "") or ""
+            subject     = case.get("Subject",     "") or ""
             description = case.get("Description", "") or ""
-            status      = case.get("Status", "") or ""
+            status      = case.get("Status",      "") or ""
+            resolution  = (case.get("Resolution__c") or case.get("Comments") or "")
+
+            # Build structured metadata from available fields as fallback content
+            _meta_parts = []
+            for _label, _key in [
+                ("Type",            "Type"),
+                ("Reason",          "Reason"),
+                ("Priority",        "Priority"),
+                ("Origin",          "Origin"),
+                ("Product",         "Product__c"),
+                ("SLA Violation",   "SLAViolation__c"),
+                ("Engineering Req", "EngineeringReqNumber__c"),
+                ("Liability",       "PotentialLiability__c"),
+            ]:
+                _v = case.get(_key)
+                if _v and str(_v).strip():
+                    _meta_parts.append(f"{_label}: {_v}")
+            structured_meta = " | ".join(_meta_parts) if _meta_parts else ""
+
+            # Use structured metadata as description when no text description exists
+            if not description and structured_meta:
+                description = structured_meta
+
             active_ids.append(cid)
-
             comments_list = []
+
+            # ── CaseComment: subquery (bulk, one API call) or per-case fallback ──
+            if use_cc_subquery:
+                cc = case.get("CaseComments")
+                if cc and isinstance(cc, dict):
+                    for c in cc.get("records", []):
+                        body = (c.get("CommentBody") or "").strip()
+                        if body:
+                            comments_list.append(body)
+            else:
+                try:
+                    res = sf.query_all(
+                        f"SELECT CommentBody, CreatedDate "
+                        f"FROM CaseComment WHERE ParentId='{cid}' ORDER BY CreatedDate ASC"
+                    )
+                    for c in res.get("records", []):
+                        body = (c.get("CommentBody") or "").strip()
+                        if body:
+                            comments_list.append(body)
+                except Exception as e:
+                    errors.append(f"CaseComment [{case_number}]: {e}")
+
+            # ── Chatter FeedItem + FeedComments ──────────────
+            # Comments entered via the Salesforce case feed are stored as
+            # FeedComment records on the case's FeedItem (usually a
+            # CreateRecordEvent), not as standalone TextPost FeedItems.
             try:
                 res = sf.query_all(
-                    f"SELECT CommentBody, IsPublished, CreatedDate "
-                    f"FROM CaseComment WHERE ParentId='{cid}' ORDER BY CreatedDate ASC"
+                    f"SELECT Body, "
+                    f"(SELECT CommentBody, CreatedDate FROM FeedComments ORDER BY CreatedDate ASC) "
+                    f"FROM FeedItem WHERE ParentId='{cid}' ORDER BY CreatedDate ASC LIMIT 30"
                 )
-                for c in res.get("records", []):
-                    body = (c.get("CommentBody") or "").strip()
-                    if body: comments_list.append(body)
-            except Exception: pass
+                for fi in res.get("records", []):
+                    # Direct FeedItem body (TextPost type)
+                    body = _strip_html(fi.get("Body") or "").strip()
+                    if body:
+                        comments_list.append(body)
+                    # FeedComments (replies on the feed item — the main comment path)
+                    fc_result = fi.get("FeedComments")
+                    if fc_result and isinstance(fc_result, dict):
+                        for fc in fc_result.get("records", []):
+                            fc_body = _strip_html(fc.get("CommentBody") or "").strip()
+                            if fc_body:
+                                comments_list.append(fc_body)
+            except Exception as e:
+                errors.append(f"FeedItem [{case_number}]: {e}")
 
-            try:
-                res = sf.query_all(
-                    f"SELECT Body FROM FeedItem "
-                    f"WHERE ParentId='{cid}' AND Type='TextPost' ORDER BY CreatedDate ASC LIMIT 30"
-                )
-                for f in res.get("records", []):
-                    body = (f.get("Body") or "").strip()
-                    if body: comments_list.append(body)
-            except Exception: pass
-
+            # ── EmailMessage ─────────────────────────────────
             try:
                 res = sf.query_all(
                     f"SELECT TextBody FROM EmailMessage "
                     f"WHERE ParentId='{cid}' ORDER BY MessageDate ASC LIMIT 20"
                 )
-                for e in res.get("records", []):
-                    body = (e.get("TextBody") or "").strip()
-                    if body: comments_list.append(body)
-            except Exception: pass
+                for em in res.get("records", []):
+                    body = (em.get("TextBody") or "").strip()
+                    if body:
+                        comments_list.append(body)
+            except Exception as e:
+                errors.append(f"EmailMessage [{case_number}]: {e}")
+
+            comments_text = "\n\n".join(comments_list)
 
             support_db.upsert_sf_case(
                 sf_case_id=cid, case_number=case_number, subject=subject,
-                description=description, status=status, resolution="",
-                comments="\n\n".join(comments_list),
+                description=description, status=status,
+                resolution=str(resolution), comments=comments_text,
             )
+            if not (comments_text or description or resolution):
+                empty_content += 1
             synced += 1
 
         deleted = support_db.delete_removed_cases(active_ids)
         support_db.update_sync_log(synced)
+
         msg = f"✅ Synced {synced} cases from Salesforce."
+        if empty_content:
+            msg += f"\n⚠️ {empty_content} case(s) have no description or comments in Salesforce — the resolution steps need to be added directly to those Salesforce cases."
         if deleted:
-            msg += f" Removed {deleted} deleted case(s)."
+            msg += f"\n🗑 Removed {deleted} deleted case(s)."
+        if errors:
+            unique_types = list(dict.fromkeys(e.split(" [")[0] for e in errors))
+            msg += f"\n❌ Could not fetch {', '.join(unique_types[:3])} data. Ask your SF admin to grant API Read access to these objects."
         return True, msg
 
     except Exception as exc:
@@ -584,30 +698,54 @@ def sync_sf_knowledge() -> tuple[bool, str]:
 # ═══════════════════════════════════════════════════════════
 # AI HELPERS
 # ═══════════════════════════════════════════════════════════
-_GROQ_MODELS   = ["llama-3.3-70b-versatile", "llama-3.1-8b-instant"]
+_GROQ_MODELS   = ["deepseek-r1-distill-llama-70b", "llama-3.3-70b-versatile", "llama-3.1-8b-instant"]
 _VISION_MODELS = ["llama-3.2-11b-vision-preview", "llama-3.2-90b-vision-preview"]
-_EXCEL_PATH    = os.path.join(os.path.dirname(os.path.abspath(__file__)), "Worksoft Support Queries.xlsx")
-_EXCEL_SHEET   = "Sheet2"
+
+_EXPERT_PERSONA = (
+    "You are a smart, warm Worksoft support expert at Qualesce. "
+    "Talk exactly like ChatGPT or DeepSeek would — natural, human, conversational. "
+    "Be empathetic, concise, and helpful. Use contractions. Ask follow-up questions when you need clarity. "
+    "Never sound robotic, formal, or scripted. "
+    "You have deep knowledge of Worksoft CTM, Certify, Portal, Capture, and agent machines. "
+    "When case content is available you show it directly. When it's not, you engage naturally and troubleshoot."
+)
+
+_GREET_WORDS = {"hi","hello","hey","hii","helo","heya","howdy","greetings",
+                "morning","afternoon","evening","sup","yo","namaste","hai","hola"}
+_GREETINGS   = _GREET_WORDS | {
+    "good morning","good afternoon","good evening","good day",
+    "what's up","whats up","hi there","hey there","hello there",
+    "hi all","hello all",
+}
 
 
-def _ask_groq(system_prompt: str, user_prompt: str, max_tokens: int = 800) -> str:
+def _ask_groq(system_prompt: str, user_prompt: str, max_tokens: int = 800,
+              history: list = None) -> str:
     if not GROQ_API_KEY:
         return ""
     try:
         from groq import Groq
         client = Groq(api_key=GROQ_API_KEY)
+        # Build messages with conversation history for context
+        messages = [{"role": "system", "content": system_prompt}]
+        if history:
+            for msg in history[-6:]:
+                role    = msg.get("role", "")
+                content = msg.get("content", "")
+                if role in ("user", "assistant") and content:
+                    messages.append({"role": role, "content": str(content)[:600]})
+        messages.append({"role": "user", "content": user_prompt})
         for model in _GROQ_MODELS:
             try:
                 r = client.chat.completions.create(
                     model=model,
-                    messages=[
-                        {"role": "system", "content": system_prompt},
-                        {"role": "user",   "content": user_prompt},
-                    ],
+                    messages=messages,
                     max_tokens=max_tokens,
-                    temperature=0.1,
+                    temperature=0.3,
                 )
-                reply = r.choices[0].message.content.strip()
+                reply = r.choices[0].message.content or ""
+                # deepseek-r1 wraps chain-of-thought in <think>...</think> — strip it
+                reply = re.sub(r"<think>.*?</think>", "", reply, flags=re.DOTALL).strip()
                 if reply:
                     return reply
             except Exception:
@@ -617,7 +755,7 @@ def _ask_groq(system_prompt: str, user_prompt: str, max_tokens: int = 800) -> st
     return ""
 
 
-def _image_to_query(file_data: dict, user_text: str) -> str:
+def _describe_image(file_data: dict, user_text: str) -> str:
     if not GROQ_API_KEY:
         return user_text
     try:
@@ -631,7 +769,7 @@ def _image_to_query(file_data: dict, user_text: str) -> str:
                         {"type": "text", "text": "Describe the error or issue in this screenshot in 2 short sentences. Only describe what you see."},
                         {"type": "image_url", "image_url": {"url": f"data:{file_data['mime']};base64,{file_data['base64']}"}},
                     ]}],
-                    max_tokens=100, temperature=0.0,
+                    max_tokens=120, temperature=0.0,
                 )
                 return f"{user_text} {r.choices[0].message.content}"
             except Exception:
@@ -641,218 +779,576 @@ def _image_to_query(file_data: dict, user_text: str) -> str:
     return user_text
 
 
-def _load_sf_cases() -> list:
-    try:
-        import pandas as pd
-        df = pd.read_excel(_EXCEL_PATH, sheet_name=_EXCEL_SHEET, engine="openpyxl")
-        df = df.fillna("")
-        return df.to_dict(orient="records")
-    except Exception:
+def _build_sf_context(matches: list) -> dict:
+    context_lines = []
+    resolution_blocks = []
+    for i, case in enumerate(matches, 1):
+        subject    = (case.get("subject")     or "").strip()
+        status     = (case.get("status")      or "").strip()
+        case_num   = (case.get("case_number") or "").strip()
+        comments   = (case.get("comments")    or "").strip()
+        desc       = (case.get("description") or "").strip()
+        resolution = (case.get("resolution")  or "").strip()
+        header = f"--- Case {i}"
+        if case_num: header += f" (#{case_num})"
+        if subject:  header += f": {subject}"
+        if status:   header += f" [{status}]"
+        context_lines.append(header)
+        content = comments or desc or resolution
+        if content:
+            resolution_blocks.append(f"=== Case {i} – {subject} ===\n{content[:2500]}")
+    return {
+        "context_block": "\n".join(context_lines),
+        "resolution":    "\n\n".join(resolution_blocks),
+    }
+
+
+def _is_greeting(text: str) -> bool:
+    clean = re.sub(r"[^a-z\s']", "", text.lower()).strip()
+    first_word = clean.split()[0] if clean.split() else ""
+    return (
+        clean in _GREETINGS
+        or all(w in _GREET_WORDS for w in clean.split() if w)
+        or (first_word in _GREET_WORDS and len(clean.split()) <= 4
+            and not any(c.isdigit() for c in clean))
+    )
+
+
+def _reset_chat_state():
+    st.session_state.sf_resolution   = ""
+    st.session_state.sf_case_context = ""
+    st.session_state.sf_steps        = []
+    st.session_state.sf_step_idx     = 0
+    st.session_state.chat_phase      = "idle"
+    st.session_state.initial_issue   = ""
+
+
+_NEXT_WORDS = {"next","ok","done","continue","yes","sure","ready","proceed",
+               "got","good","great","worked","fixed","move","go","yep","yeah"}
+
+
+def _format_case_content(content: str) -> str:
+    """Format raw Salesforce case text as readable markdown — exact content, no AI."""
+    content = content.strip()
+    if not content:
+        return content
+
+    # Already numbered steps (1. / 1) ) — preserve numbering, clean whitespace
+    if re.search(r'(?m)^\s*\d+[\.\)]\s', content):
+        parts = re.split(r'(?m)(?=^\s*\d+[\.\)]\s)', content)
+        return "\n\n".join(p.strip() for p in parts if p.strip())
+
+    # Multiple paragraphs — bullet each paragraph
+    paras = [p.strip() for p in re.split(r'\n\s*\n', content) if p.strip()]
+    if len(paras) > 1:
+        return "\n\n".join(f"- {p}" for p in paras)
+
+    # Multiple lines — bullet each line
+    lines = [l.strip() for l in content.splitlines() if l.strip()]
+    if len(lines) > 1:
+        return "\n".join(f"- {l}" for l in lines)
+
+    return content
+
+
+# ── Jinja chat renderer ────────────────────────────────────────
+from jinja2 import Template as _JTmpl
+
+_CHAT_CSS = """
+<style>
+/* ── keyframes ─────────────────────────────────── */
+@keyframes msgBot {
+  from { opacity:0; transform:translateX(-22px) translateY(8px) scale(.97); }
+  to   { opacity:1; transform:none; }
+}
+@keyframes msgUser {
+  from { opacity:0; transform:translateX(22px) translateY(8px) scale(.97); }
+  to   { opacity:1; transform:none; }
+}
+@keyframes avPop {
+  0%   { opacity:0; transform:scale(.4) rotate(-12deg); }
+  70%  { transform:scale(1.15) rotate(4deg); }
+  100% { opacity:1; transform:scale(1) rotate(0deg); }
+}
+@keyframes dotBounce {
+  0%,60%,100% { transform:translateY(0);   opacity:.35; }
+  30%         { transform:translateY(-7px); opacity:1;   }
+}
+@keyframes typingFade {
+  from { opacity:0; transform:translateX(-14px) translateY(6px); }
+  to   { opacity:1; transform:none; }
+}
+
+/* ── layout ─────────────────────────────────────── */
+.qchat{display:flex;flex-direction:column;gap:18px;padding:4px 0 130px;}
+.qrow{display:flex;align-items:flex-start;gap:10px;}
+.qrow.user{flex-direction:row-reverse;}
+
+/* ── avatars ─────────────────────────────────────── */
+.qav{width:36px;height:36px;border-radius:50%;display:flex;align-items:center;
+     justify-content:center;font-size:17px;flex-shrink:0;margin-top:3px;}
+.qav.assistant{background:linear-gradient(135deg,#2563eb,#0ea5e9);}
+.qav.user{background:linear-gradient(135deg,#7c3aed,#a855f7);}
+/* only the newest message avatar pops */
+.qrow.latest .qav{animation:avPop .35s cubic-bezier(.34,1.56,.64,1) both;}
+
+/* ── bubbles ─────────────────────────────────────── */
+.qbubble{max-width:82%;padding:14px 18px;font-size:14px;line-height:1.8;
+         word-break:break-word;}
+.qbubble.assistant{background:#fff;border:1px solid #e2e8f0;color:#1e293b;
+                   border-radius:4px 18px 18px 18px;
+                   box-shadow:0 2px 12px rgba(0,0,0,.07);}
+.qbubble.user{background:linear-gradient(135deg,#2563eb,#1d4ed8);color:#fff;
+              border-radius:18px 4px 18px 18px;
+              box-shadow:0 4px 14px rgba(37,99,235,.35);}
+/* only the newest bubble animates */
+.qrow.latest.assistant .qbubble{
+  animation:msgBot .42s cubic-bezier(.22,.68,0,1.15) both;}
+.qrow.latest.user .qbubble{
+  animation:msgUser .38s cubic-bezier(.22,.68,0,1.15) both;}
+
+/* ── bubble content ──────────────────────────────── */
+.qbubble p{margin:0 0 10px 0;}
+.qbubble p:last-child{margin-bottom:0;}
+.qbubble ol{margin:10px 0 10px 22px;padding:0;}
+.qbubble ul{margin:10px 0 10px 22px;padding:0;}
+.qbubble li{margin-bottom:8px;line-height:1.75;}
+.qbubble hr{border:none;border-top:1px solid #e2e8f0;margin:12px 0;}
+.qbubble strong{color:#1d4ed8;}
+.qbubble.user strong{color:#bfdbfe;}
+.qbubble code{background:#eff6ff;color:#2563eb;padding:2px 7px;
+              border-radius:5px;font-family:monospace;font-size:12.5px;}
+.qbubble.user code{background:rgba(255,255,255,.2);color:#e0f2fe;}
+.qbubble pre{background:#f8fafc;border:1px solid #e2e8f0;border-radius:8px;
+             padding:12px 14px;overflow-x:auto;margin:10px 0;}
+.qbubble pre code{background:none;color:#0f172a;padding:0;}
+.case-tag{display:inline-block;background:#eff6ff;color:#1d4ed8;font-size:12px;
+          font-weight:700;padding:3px 10px;border-radius:99px;margin-bottom:10px;
+          border:1px solid #bfdbfe;}
+
+/* ── typing indicator ────────────────────────────── */
+.qtyping-row{display:flex;align-items:flex-start;gap:10px;
+             animation:typingFade .3s ease both;}
+.qtyping-av{width:36px;height:36px;border-radius:50%;flex-shrink:0;margin-top:3px;
+            background:linear-gradient(135deg,#2563eb,#0ea5e9);
+            display:flex;align-items:center;justify-content:center;font-size:17px;}
+.qtyping-bubble{background:#fff;border:1px solid #e2e8f0;
+                border-radius:4px 18px 18px 18px;
+                box-shadow:0 2px 12px rgba(0,0,0,.07);
+                padding:16px 20px;display:flex;gap:6px;align-items:center;}
+.qtyping-bubble span{width:8px;height:8px;border-radius:50%;background:#94a3b8;
+                     display:inline-block;
+                     animation:dotBounce 1.1s infinite ease-in-out;}
+.qtyping-bubble span:nth-child(2){animation-delay:.18s;}
+.qtyping-bubble span:nth-child(3){animation-delay:.36s;}
+</style>
+"""
+
+_CHAT_TMPL = _JTmpl("""
+{{ css | safe }}
+<div class="qchat" id="qchat-root">
+{% for msg in messages %}
+<div class="qrow {{ msg.role }}{% if loop.last %} latest{% endif %}">
+  <div class="qav {{ msg.role }}">{{ '\U0001f916' if msg.role == 'assistant' else '\U0001f464' }}</div>
+  <div class="qbubble {{ msg.role }}">{{ msg.html | safe }}</div>
+</div>
+{% endfor %}
+</div>
+<script>
+(function(){
+  var el = document.getElementById('qchat-root');
+  if(el){ el.lastElementChild.scrollIntoView({behavior:'smooth',block:'end'}); }
+  window.scrollTo({top:document.body.scrollHeight, behavior:'smooth'});
+})();
+</script>
+""")
+
+_TYPING_HTML = """
+<style>
+@keyframes typingFade{from{opacity:0;transform:translateX(-14px) translateY(6px);}to{opacity:1;transform:none;}}
+@keyframes dotBounce{0%,60%,100%{transform:translateY(0);opacity:.35;}30%{transform:translateY(-7px);opacity:1;}}
+.qtyping-row{display:flex;align-items:flex-start;gap:10px;padding:4px 0 8px;animation:typingFade .3s ease both;}
+.qtyping-av{width:36px;height:36px;border-radius:50%;flex-shrink:0;
+            background:linear-gradient(135deg,#2563eb,#0ea5e9);
+            display:flex;align-items:center;justify-content:center;font-size:17px;}
+.qtyping-bubble{background:#fff;border:1px solid #e2e8f0;
+                border-radius:4px 18px 18px 18px;
+                box-shadow:0 2px 12px rgba(0,0,0,.07);
+                padding:16px 20px;display:flex;gap:6px;align-items:center;}
+.qtyping-bubble span{width:8px;height:8px;border-radius:50%;background:#94a3b8;
+                     display:inline-block;animation:dotBounce 1.1s infinite ease-in-out;}
+.qtyping-bubble span:nth-child(2){animation-delay:.18s;}
+.qtyping-bubble span:nth-child(3){animation-delay:.36s;}
+</style>
+<div class="qtyping-row">
+  <div class="qtyping-av">🤖</div>
+  <div class="qtyping-bubble"><span></span><span></span><span></span></div>
+</div>
+"""
+
+
+def _md_to_html(text: str) -> str:
+    """Convert markdown text to HTML — no extra dependencies."""
+    import html as _h
+    text = _h.escape(text)
+    # Bold
+    text = re.sub(r'\*\*(.*?)\*\*', r'<strong>\1</strong>', text)
+    # Inline code
+    text = re.sub(r'`([^`\n]+)`', r'<code>\1</code>', text)
+    # Horizontal rule
+    text = re.sub(r'(?m)^---+\s*$', '\x00HR\x00', text)
+
+    lines  = text.split('\n')
+    out    = []
+    in_ol  = False
+    in_ul  = False
+
+    def close_lists():
+        nonlocal in_ol, in_ul
+        if in_ol:  out.append('</ol>'); in_ol = False
+        if in_ul:  out.append('</ul>'); in_ul = False
+
+    for line in lines:
+        stripped = line.strip()
+        if stripped == '\x00HR\x00':
+            close_lists(); out.append('<hr>'); continue
+        if not stripped:
+            close_lists(); continue
+        ol_m = re.match(r'^(\d+)[\.\)]\s+(.*)', stripped)
+        ul_m = re.match(r'^[-•]\s+(.*)', stripped)
+        if ol_m:
+            if in_ul: out.append('</ul>'); in_ul = False
+            if not in_ol: out.append('<ol>'); in_ol = True
+            out.append(f'<li>{ol_m.group(2)}</li>')
+        elif ul_m:
+            if in_ol: out.append('</ol>'); in_ol = False
+            if not in_ul: out.append('<ul>'); in_ul = True
+            out.append(f'<li>{ul_m.group(1)}</li>')
+        else:
+            close_lists()
+            out.append(f'<p>{stripped}</p>')
+
+    close_lists()
+    return '\n'.join(out)
+
+
+def _render_messages_html(messages: list) -> str:
+    import html as _h
+    prepared = []
+    for msg in messages:
+        content = msg.get("content", "")
+        if msg["role"] == "assistant":
+            html_body = _md_to_html(content)
+        else:
+            html_body = f'<p>{_h.escape(content)}</p>'
+        prepared.append({"role": msg["role"], "html": html_body})
+    return _CHAT_TMPL.render(css=_CHAT_CSS, messages=prepared)
+
+
+def _parse_steps(content: str) -> list:
+    """Split case content into individual steps by numbered list, then paragraph, then line."""
+    parts = re.split(r'(?m)(?=^\s*\d+[\.\)]\s)', content)
+    steps = [p.strip() for p in parts if p.strip()]
+    if len(steps) > 1:
+        return steps
+    parts = [p.strip() for p in re.split(r'\n\s*\n', content) if p.strip()]
+    if len(parts) > 1:
+        return parts
+    parts = [p.strip() for p in content.splitlines() if p.strip()]
+    if len(parts) > 1:
+        return parts
+    return [content.strip()]
+
+
+def _retrieve_best_cases(query: str, top_n: int = 1) -> list:
+    """
+    Two-stage retrieval — much more accurate than single-pass keyword/snippet matching.
+
+    Stage 1 (broad): ALL case subjects sent to Groq → up to 12 candidates selected
+                     semantically + keyword-matched cases merged in.
+    Stage 2 (precise): Full content of candidates sent to Groq → best 1-2 cases chosen
+                       based on actual content, not just subject.
+    """
+    # ── Stage 1: broad candidate selection on subjects ─────────
+    all_subs = support_db.get_all_case_subjects()
+    if not all_subs:
         return []
 
+    sub_lines = [
+        f"{i+1}. [{c.get('case_number','')}] {c.get('subject','')}"
+        for i, c in enumerate(all_subs[:400])
+        if c.get("subject", "").strip()
+    ]
 
-def _search_sf_cases(query: str, rows: list, top_n: int = 3) -> list:
-    stop = {"the","a","an","is","it","in","on","at","to","and","or","of",
-            "my","i","can","not","be","for","are","was","this","that",
-            "with","from","have","has","do","did","get","got","how","why",
-            "what","when","where","please","help","issue","problem","error"}
-    words = [w for w in re.findall(r"[a-z0-9]+", query.lower())
-             if w not in stop and len(w) > 2]
-    if not words:
-        return rows[:top_n]
+    s1_resp = _ask_groq(
+        system_prompt=(
+            "You are a Worksoft support case matcher. A user has a problem. "
+            "Your job: pick every case whose subject MIGHT be related to the user's question. "
+            "Be INCLUSIVE — it is far better to include too many than to miss the right one. "
+            "Think broadly and semantically:\n"
+            "  'CTM session timeout' → 'MouseMove', 'session keep-alive', 'CTM timeout', 'appsettings'\n"
+            "  'suite stuck abort pending' → 'Abort Pending', 'Force Abort', 'execution stuck'\n"
+            "  'login fails' → 'authentication', 'credentials', 'SSO', 'access denied'\n"
+            "Return ONLY position numbers of up to 12 candidates, e.g. '3, 7, 12, 45'. "
+            "If absolutely nothing is even loosely related, return: NONE"
+        ),
+        user_prompt=f"User question: {query}\n\nCase subjects:\n" + "\n".join(sub_lines),
+        max_tokens=60,
+    )
 
-    def score(row: dict) -> int:
-        q  = str(row.get("Question/Problem", "")).lower()
-        em = str(row.get("Error Message",    "")).lower()
-        rc = str(row.get("Root Cause",       "")).lower()
-        rs = str(row.get("Resolution Steps", "")).lower()
-        s  = 0
-        for w in words:
-            s += q.count(w)  * 4
-            s += em.count(w) * 3
-            s += rc.count(w) * 2
-            s += rs.count(w) * 1
-        return s
+    candidate_ids: list = []
+    if s1_resp and re.sub(r"[^a-zA-Z]", "", s1_resp).upper() != "NONE":
+        for token in re.findall(r"\d+", s1_resp):
+            idx = int(token) - 1
+            if 0 <= idx < len(all_subs):
+                cid = all_subs[idx]["sf_case_id"]
+                if cid not in candidate_ids:
+                    candidate_ids.append(cid)
 
-    scored = sorted(rows, key=score, reverse=True)
-    return [r for r in scored if score(r) > 0][:top_n]
+    # Merge keyword-matched cases so neither method alone can miss the answer
+    kw_hits = support_db.search_knowledge(query, top_n=5)
+    for m in kw_hits:
+        cid = m["sf_case_id"]
+        if cid not in candidate_ids:
+            candidate_ids.append(cid)
+
+    if not candidate_ids:
+        return []
+
+    # ── Stage 2: content-level precise re-ranking ──────────────
+    candidates = support_db.get_cases_by_ids(candidate_ids[:15])
+    if not candidates:
+        return []
+    if len(candidates) == 1:
+        return candidates
+
+    content_blocks = []
+    for i, c in enumerate(candidates):
+        case_num = (c.get("case_number", "") or "").strip()
+        subject  = (c.get("subject",     "") or "").strip()
+        comments = (c.get("comments",    "") or "").strip()[:1500]
+        desc     = (c.get("description", "") or "").strip()[:600]
+        body     = comments or desc or "(no content)"
+        content_blocks.append(f"[{i+1}] Case #{case_num} — {subject}\n{body}")
+
+    s2_resp = _ask_groq(
+        system_prompt=(
+            "You are a Worksoft support specialist. "
+            "Read each case's ACTUAL CONTENT carefully — not just the subject. "
+            "Pick the 1-2 cases whose content genuinely answers the user's question. "
+            "The answer must be IN the case content. "
+            "Return ONLY position numbers, e.g. '2' or '1, 3'. "
+            "If no case content actually addresses the user's issue, return: NONE"
+        ),
+        user_prompt=(
+            f"User question: {query}\n\n"
+            "Cases (judge by content, not subject alone):\n\n"
+            + "\n\n---\n\n".join(content_blocks)
+        ),
+        max_tokens=20,
+    )
+
+    if s2_resp and re.sub(r"[^a-zA-Z]", "", s2_resp).upper() != "NONE":
+        final_ids: list = []
+        for token in re.findall(r"\d+", s2_resp):
+            idx = int(token) - 1
+            if 0 <= idx < len(candidates):
+                cid = candidates[idx]["sf_case_id"]
+                if cid not in final_ids:
+                    final_ids.append(cid)
+        if final_ids:
+            return [c for c in candidates if c["sf_case_id"] in final_ids][:top_n]
+
+    # Stage 2 said NONE or failed — fall back to stage 1 candidates with content
+    with_content = [
+        c for c in candidates
+        if (c.get("comments") or c.get("description") or "").strip()
+    ]
+    return (with_content or candidates)[:top_n]
 
 
 # ═══════════════════════════════════════════════════════════
 # CHAT ENGINE
 # ═══════════════════════════════════════════════════════════
-_GREET_WORDS = {"hi","hello","hey","hii","helo","heya","howdy","greetings",
-                "morning","afternoon","evening","sup","yo","namaste","hai","hola"}
-_GREETINGS   = _GREET_WORDS | {
-    "good morning","good afternoon","good evening","good day",
-    "what's up","whats up","hi there","hey there","hello there",
-    "hi all","hello all",
-}
-
-_EXPERT_PERSONA = (
-    "You are an expert Worksoft Certify support engineer at Qualesce with deep knowledge of "
-    "Worksoft CTM (Continuous Testing Manager), Certify, Portal, Capture, and agent machines. "
-    "You help users fix their Worksoft issues through clear, confident, step-by-step guidance."
-)
-
-
 def groq_chat(text: str, history: list, file_data: dict = None) -> str:
     if file_data and file_data["type"] == "image":
-        query = _image_to_query(file_data, text)
+        query = _describe_image(file_data, text)
     elif file_data and file_data["type"] == "text":
         query = f"{text} {file_data['content'][:500]}"
     else:
         query = text
 
-    # ── Greeting detection ──────────────────────────────────
-    clean = re.sub(r"[^a-z\s']", "", text.lower()).strip()
-    first_word = clean.split()[0] if clean.split() else ""
-    is_greeting = (
-        clean in _GREETINGS
-        or all(w in _GREET_WORDS for w in clean.split())
-        or (first_word in _GREET_WORDS and len(clean.split()) <= 4
-            and not any(c.isdigit() for c in clean))
-    )
-    if is_greeting:
-        user = st.session_state.get("user")
-        name = f" {user['name'].split()[0]}" if user else ""
+    user      = st.session_state.get("user")
+    user_name = user["name"].split()[0] if user else "there"
+    phase     = st.session_state.get("chat_phase", "idle")
+
+    # ── GREETING ──────────────────────────────────────────────
+    if _is_greeting(text) and not file_data and phase == "idle":
         return _ask_groq(
             system_prompt=(
-                f"{_EXPERT_PERSONA} "
-                "The user has greeted you. Respond warmly in 2-3 sentences: "
-                "greet them by name, introduce yourself, and invite them to describe "
-                "their Worksoft issue so you can help them step by step."
+                f"{_EXPERT_PERSONA} The user just greeted you. "
+                f"Say hi to {user_name} by name, mention you're their Worksoft support buddy, "
+                "and warmly ask what they're running into. One or two sentences max."
             ),
-            user_prompt=f"User greeted: '{text}'. User name: {name.strip() or 'unknown'}.",
-            max_tokens=130,
-        ) or (
-            f"Hello{name}! 👋 I'm your Worksoft Certify AI support engineer at Qualesce.\n\n"
-            "What Worksoft issue are you facing today? Describe it and I'll walk you through the fix step by step."
-        )
+            user_prompt=f"User said: '{text}'",
+            history=history,
+            max_tokens=100,
+        ) or f"Hey {user_name}! I'm your Worksoft support buddy. What's going on today?"
 
-    # ── Continue active step-by-step resolution ─────────────
-    sf_resolution   = st.session_state.get("sf_resolution", "")
-    sf_case_context = st.session_state.get("sf_case_context", "")
-    if sf_resolution:
-        chat_history = ""
-        for m in history[-12:]:
-            role = "Support Engineer" if m["role"] == "assistant" else "User"
-            chat_history += f"{role}: {m['content']}\n\n"
+    # ── RESOLVING PHASE — follow-ups from case context ────────
+    sf_resolution = st.session_state.get("sf_resolution", "")
 
-        context_block = f"\nCase context:\n{sf_case_context}\n" if sf_case_context else ""
+    if phase == "resolving" and sf_resolution:
+        user_words = set(re.findall(r"[a-z]+", text.lower()))
+        _DONE = {"thanks","thank","resolved","fixed","worked","done",
+                 "sorted","great","perfect","awesome","solved","cheers"}
+        if user_words & _DONE and len(text.strip()) < 80:
+            _reset_chat_state()
+            return _ask_groq(
+                system_prompt=(
+                    f"{_EXPERT_PERSONA} The issue is resolved. "
+                    "Wrap up warmly in 1-2 sentences and tell them to hit '✅ Yes, resolved!' below."
+                ),
+                user_prompt=text,
+                history=history,
+                max_tokens=80,
+            ) or "Glad that sorted it! Go ahead and hit **✅ Yes, resolved!** below."
 
-        reply = _ask_groq(
+        case_ctx = st.session_state.get("sf_case_context", "")
+        return _ask_groq(
             system_prompt=(
-                f"{_EXPERT_PERSONA} "
-                "You are guiding a user through a troubleshooting process one step at a time."
-                f"{context_block}"
-                f"\nFull resolution steps:\n{sf_resolution}"
-                "\n\nRules:"
-                "\n- Give ONE step at a time only."
-                "\n- For each step: state the action clearly, then in 1 sentence explain WHY this step matters."
-                "\n- After the step say: 'Reply **next** when you are ready for the next step.'"
-                "\n- If user says next / ok / continue / yes / sure / done → give the next step."
-                "\n- If the user asks a question → answer using your Worksoft expertise, then remind them to say next."
-                "\n- If the user reports an error during a step → diagnose it and give corrective advice."
-                "\n- If all steps are done → confirm the issue should be resolved, summarise what was done, and ask if it helped."
-                "\n- Never give more than one step per reply."
+                f"{_EXPERT_PERSONA}\n\n"
+                "The user already got the resolution steps and is asking a follow-up. "
+                "Answer naturally and conversationally — clarify a specific step, reassure them, "
+                "or help them diagnose if something didn't work. "
+                "Keep it concise. Don't repeat all the steps unless they explicitly ask.\n\n"
+                + (f"Issue context: {case_ctx}\n" if case_ctx else "")
+                + f"Resolution reference:\n{sf_resolution[:1500]}"
             ),
-            user_prompt=(
-                f"Conversation so far:\n{chat_history}"
-                f"User just said: {text}\n\n"
-                "Continue the troubleshooting — give only the next step with a brief explanation of why it is needed."
-            ),
-            max_tokens=400,
-        )
-        if reply:
-            return reply
+            user_prompt=text,
+            history=history,
+            max_tokens=300,
+        ) or "Happy to help — which step are you stuck on? I'll walk you through it."
 
-    # ── New question — reset and find matching case ──────────
-    st.session_state.sf_resolution   = ""
-    st.session_state.sf_case_context  = ""
+    # ── INTAKE PHASE — user answered our clarifying question, now search ──
+    if phase == "intake":
+        original   = st.session_state.get("initial_issue", "")
+        # Combine original issue + clarification for richer search
+        full_query = f"{original}. {text}".strip(". ") if original else text
+        _reset_chat_state()
+        return _resolve(full_query, text, history)
 
-    rows    = _load_sf_cases()
-    matches = _search_sf_cases(query, rows) if rows else []
+    # ── IDLE — first message on this issue ────────────────────
+    # Images/files: skip clarification and go straight to answer
+    if file_data:
+        _reset_chat_state()
+        return _resolve(query, text, history)
 
-    # ── No match → AI general fallback ──────────────────────
+    # Store the issue and ask ONE smart clarifying question before answering
+    st.session_state.initial_issue = text
+    st.session_state.chat_phase    = "intake"
+
+    clarifying_q = _ask_groq(
+        system_prompt=(
+            f"{_EXPERT_PERSONA}\n\n"
+            "The user just described a Worksoft issue. Before looking up a solution, "
+            "ask ONE short, targeted question to understand their situation better.\n\n"
+            "Good questions to pick from (choose the most relevant ONE):\n"
+            "- Which Worksoft module is this — CTM, Certify, Portal, or Capture?\n"
+            "- What's the exact error message or error code you're seeing?\n"
+            "- Is this happening on all machines or just one specific machine?\n"
+            "- Did this start after a recent update, restart, or config change?\n"
+            "- How long has this been happening — is it new or was it working before?\n\n"
+            "Rules:\n"
+            "- Pick the ONE question that would most help narrow down the fix.\n"
+            "- Don't ask multiple questions at once.\n"
+            "- Keep it short and conversational — one sentence.\n"
+            "- Acknowledge their issue briefly before asking (e.g. 'Got it!' or 'Ah, that can be tricky —')."
+        ),
+        user_prompt=f"User's issue: {text}",
+        history=history,
+        max_tokens=100,
+    )
+
+    return clarifying_q or "Got it! Just to point you to the right fix — which Worksoft module is this in: CTM, Certify, or Portal?"
+
+
+def _resolve(query: str, original_text: str, history: list) -> str:
+    """Search cases and return a conversational answer. Used by both intake and direct paths."""
+    matches = _retrieve_best_cases(query, top_n=1)
+
     if not matches:
-        fallback = _ask_groq(
+        return _ask_groq(
             system_prompt=(
-                f"{_EXPERT_PERSONA} "
-                "No specific case was found for the user's issue. "
-                "Using your Worksoft expertise:\n"
-                "1. Acknowledge their issue in 1 sentence.\n"
-                "2. Give 2-3 practical general troubleshooting suggestions relevant to Worksoft Certify.\n"
-                "3. Ask them to share more details (error messages, screenshots) "
-                "or click 'Still need help' to raise a support ticket."
+                f"{_EXPERT_PERSONA}\n\n"
+                "No matching case was found in our knowledge base. "
+                "Respond like a helpful colleague — briefly acknowledge the issue, "
+                "suggest sharing a screenshot or the exact error message, "
+                "and mention they can hit '❌ Still need help' to raise a ticket. "
+                "2-3 sentences max."
             ),
-            user_prompt=f"User issue: {text}",
-            max_tokens=280,
-        )
-        if fallback:
-            return fallback
-        return (
-            "I couldn't find a matching Salesforce case for your issue.\n\n"
-            "Try describing the exact error message you're seeing — or click "
-            "**'Still need help'** to raise a support ticket with the IT Admin."
+            user_prompt=f"User's issue: {query}",
+            history=history,
+            max_tokens=150,
+        ) or (
+            "I couldn't find an exact match for that — could you share a screenshot or "
+            "the exact error message? You can also hit **❌ Still need help** to raise a ticket."
         )
 
-    # ── Build case context ────────────────────────────────────
-    best       = matches[0]
-    problem    = str(best.get("Question/Problem", "")).strip()
-    error_msg  = str(best.get("Error Message",    "")).strip()
-    root_cause = str(best.get("Root Cause",       "")).strip()
-    raw_steps  = str(best.get("Resolution Steps", "")).strip()
-    if not raw_steps:
-        raw_steps = str(best.get("Resolution", "")).strip()
+    best     = matches[0]
+    case_num = (best.get("case_number") or "").strip()
+    subject  = (best.get("subject")     or "").strip()
+    comments = (best.get("comments")    or "").strip()
+    desc     = (best.get("description") or "").strip()
+    content  = comments or desc
 
-    if not raw_steps:
-        return (
-            "A related Salesforce case was found but no resolution steps are recorded.\n\n"
-            "Please click **'Still need help'** to raise a support ticket."
+    if not content:
+        return _ask_groq(
+            system_prompt=(
+                f"{_EXPERT_PERSONA}\n\n"
+                "You found a related case but it has no resolution notes yet. "
+                "Acknowledge the issue empathetically, say the team hasn't documented a fix yet, "
+                "and encourage them to raise a ticket. Keep it warm and brief."
+            ),
+            user_prompt=f"User's issue: {query}. Related case: {subject}",
+            history=history,
+            max_tokens=120,
+        ) or (
+            "I found a related case but there aren't resolution notes yet. "
+            "Hit **❌ Still need help** to raise a ticket and the team will dig in."
         )
 
-    # Store for step-by-step continuation
-    context_parts = []
-    if problem:    context_parts.append(f"Issue type: {problem}")
-    if error_msg:  context_parts.append(f"Known error: {error_msg}")
-    if root_cause: context_parts.append(f"Root cause: {root_cause}")
-    case_context = "\n".join(context_parts)
+    st.session_state.sf_resolution   = content
+    st.session_state.sf_case_context = f"Case #{case_num}: {subject}" if case_num else subject
+    st.session_state.sf_steps        = []
+    st.session_state.sf_step_idx     = 0
+    st.session_state.chat_phase      = "resolving"
 
-    st.session_state.sf_resolution   = raw_steps
-    st.session_state.sf_case_context  = case_context
-
-    # ── First response: root cause + Step 1 ──────────────────
     reply = _ask_groq(
         system_prompt=(
-            f"{_EXPERT_PERSONA} "
-            "You found a matching case. Structure your reply as:\n"
-            "1. One sentence identifying the issue type.\n"
-            "2. One sentence explaining the root cause (use the case context below).\n"
-            "3. Step 1 of the resolution — state the action clearly, "
-            "then 1 sentence explaining why this step is needed.\n"
-            "4. End with: 'Reply **next** when you are ready for the next step.'\n"
-            "Never give more than one step. Be clear and conversational.\n"
-            f"\nCase context:\n{case_context}\n"
-            f"\nFull resolution steps:\n{raw_steps}"
+            f"{_EXPERT_PERSONA}\n\n"
+            "You found the fix for the user's issue. Present it conversationally:\n"
+            "1. One sentence acknowledging their specific problem (empathetic, natural).\n"
+            "2. Transition naturally — 'Here's what fixes this:' or 'This usually happens because...'\n"
+            "3. The resolution steps clearly. Keep numbered steps numbered.\n"
+            "4. Close with a friendly invite — 'Let me know if any step needs clarification!'\n\n"
+            "Rules:\n"
+            "- Use ONLY the steps from the case content — never invent steps.\n"
+            "- Keep all technical details exact (file paths, config keys, values).\n"
+            "- Don't mention 'Salesforce', 'case number', or that you searched a database.\n"
+            "- Sound like a knowledgeable colleague, not a support bot.\n\n"
+            f"Case content:\n{content[:2000]}"
         ),
-        user_prompt=(
-            f"User issue: {text}\n"
-            f"Matching case: {problem}\n\n"
-            "Introduce the issue with root cause, then give only Step 1 with a brief why."
-        ),
-        max_tokens=380,
+        user_prompt=f"User's issue: {query}",
+        history=history,
+        max_tokens=700,
     )
-    if reply:
-        return reply
 
-    # Groq unavailable — plain fallback
-    first_line = raw_steps.splitlines()[0].strip()
-    return (
-        f"**{problem}**\n\n"
-        f"Step 1: {first_line}\n\n"
-        "Reply **next** when ready for the next step."
-    )
+    if not reply:
+        formatted = _format_case_content(content)
+        reply = f"Here's what usually fixes this:\n\n{formatted}\n\nLet me know if any step needs clarification!"
+
+    return reply
 
 
 # ═══════════════════════════════════════════════════════════
@@ -888,11 +1384,70 @@ def render_navbar():
 # ═══════════════════════════════════════════════════════════
 # PAGE: CHAT
 # ═══════════════════════════════════════════════════════════
+def render_sidebar():
+    import github_sync
+    with st.sidebar:
+        st.markdown("### 🛠 Knowledge Base")
+        info = support_db.get_sync_info()
+        cnt  = info.get("case_count", 0)
+        last = info.get("last_sync", "Never")[:19].replace("T", " ") if info.get("last_sync") else "Never"
+        st.caption(f"📦 **{cnt}** cases loaded  ·  Last updated: {last}")
+
+        st.markdown("---")
+        if st.button("🔄 Sync Salesforce", use_container_width=True):
+            with st.spinner("Syncing from Salesforce…"):
+                ok, msg = sync_sf_knowledge()
+            st.success(msg) if ok else st.error(msg)
+            st.rerun()
+
+        # ── GitHub DB sync ──────────────────────────────────
+        if github_sync.is_configured():
+            st.markdown("---")
+            st.markdown("### ☁️ GitHub DB Sync")
+            info_gh = github_sync.remote_info()
+            if info_gh:
+                st.caption(
+                    f"Remote: **{info_gh.get('size_kb', 0)} KB**"
+                    + (f"  ·  {info_gh.get('last_updated', '')}" if info_gh.get("last_updated") else "")
+                )
+            gc1, gc2 = st.columns(2)
+            with gc1:
+                if st.button("⬆️ Push DB", use_container_width=True):
+                    with st.spinner("Pushing to GitHub…"):
+                        ok, msg = github_sync.push_db()
+                    st.success(msg) if ok else st.error(msg)
+            with gc2:
+                if st.button("⬇️ Pull DB", use_container_width=True):
+                    with st.spinner("Pulling from GitHub…"):
+                        ok, msg = github_sync.pull_db()
+                    if ok:
+                        st.success(msg)
+                        st.rerun()
+                    else:
+                        st.error(msg)
+
+
 def render_chat():
     render_navbar()
+    render_sidebar()
 
     user = st.session_state.get("user")
     uname = f" · {user['name']}" if user else ""
+
+    # ── Sync bar ────────────────────────────────────────────
+    info  = support_db.get_sync_info()
+    cnt   = info.get("case_count", 0)
+    last  = info.get("last_sync", "")[:16].replace("T", " ") if info.get("last_sync") else "Never"
+    col_info, col_btn = st.columns([3, 1])
+    with col_info:
+        st.caption(f"📦 **{cnt}** Salesforce cases loaded · Last sync: {last}")
+    with col_btn:
+        if st.button("🔄 Sync Salesforce", use_container_width=True):
+            with st.spinner("Syncing…"):
+                ok, msg = sync_sf_knowledge()
+            st.success(msg) if ok else st.error(msg)
+            st.rerun()
+
     st.html(f"""
 <div style="background:#fff;border:1px solid #e2e8f0;border-radius:14px;
      padding:10px 18px;margin-bottom:8px;display:flex;align-items:center;
@@ -1017,8 +1572,10 @@ def render_chat():
                     st.session_state.messages.append(user_msg)
                     support_db.save_message(sid, "user", first_content, fname, ftype)
 
-                    with st.spinner("Agent is analyzing your issue…"):
-                        reply = groq_chat(first_content, st.session_state.messages, file_data)
+                    _typing_slot = st.empty()
+                    _typing_slot.html(_TYPING_HTML)
+                    reply = groq_chat(first_content, st.session_state.messages, file_data)
+                    _typing_slot.empty()
                     st.session_state.messages.append({"role": "assistant", "content": reply})
                     support_db.save_message(sid, "assistant", reply)
                     st.session_state.fu_key += 1
@@ -1026,21 +1583,17 @@ def render_chat():
                 st.rerun()
         return
 
-    # ── Render messages ─────────────────────────────────────
+    # ── Render messages via Jinja ────────────────────────────
+    if st.session_state.messages:
+        st.html(_render_messages_html(st.session_state.messages))
+    # Render any attached images separately (st.html cannot embed base64 images)
     for msg in st.session_state.messages:
-        role = msg["role"]
-        av   = "🤖" if role == "assistant" else "👤"
-        with st.chat_message(role, avatar=av):
-            st.markdown(msg["content"])
-            fdata = msg.get("file")
-            if fdata:
-                if fdata["type"] == "image":
-                    st.image(
-                        f"data:{fdata['mime']};base64,{fdata['base64']}",
-                        caption=fdata["name"], width=300
-                    )
-                else:
-                    st.caption(f"📎 {fdata['name']}")
+        fdata = msg.get("file")
+        if fdata and fdata["type"] == "image":
+            st.image(
+                f"data:{fdata['mime']};base64,{fdata['base64']}",
+                caption=fdata["name"], width=300
+            )
 
     # ── Resolution strip ────────────────────────────────────
     msgs = st.session_state.messages
@@ -1090,8 +1643,10 @@ def render_chat():
         if sid:
             support_db.save_message(sid, "user", user_input.strip(), fname, ftype)
 
-        with st.spinner(""):
-            reply = groq_chat(user_input.strip(), st.session_state.messages, file_data)
+        _typing_slot = st.empty()
+        _typing_slot.html(_TYPING_HTML)
+        reply = groq_chat(user_input.strip(), st.session_state.messages, file_data)
+        _typing_slot.empty()
 
         st.session_state.messages.append({"role": "assistant", "content": reply})
         if sid:
@@ -1105,8 +1660,7 @@ def render_chat():
         if st.button("🔄 New Chat", use_container_width=True):
             for k in ["messages","issue_text","sf_ticket","user","pending_file"]:
                 st.session_state[k] = [] if k=="messages" else ("" if k=="issue_text" else None)
-            st.session_state.sf_resolution  = ""
-            st.session_state.sf_case_context = ""
+            _reset_chat_state()
             st.session_state.fu_key += 1
             st.session_state.page = "chat"; st.rerun()
 
@@ -1142,8 +1696,7 @@ def render_resolved():
                 support_db.update_session_status(sid, "resolved")
             for k in ["messages","issue_text","sf_ticket","user","session_id"]:
                 st.session_state[k] = [] if k=="messages" else ("" if k=="issue_text" else None)
-            st.session_state.sf_resolution  = ""
-            st.session_state.sf_case_context = ""
+            _reset_chat_state()
             st.session_state.page = "chat"; st.rerun()
 
 
@@ -1294,8 +1847,7 @@ def _render_ticket(user, ticket):
         if st.button("🆕 New Chat", use_container_width=True, type="primary"):
             for k in ["messages","issue_text","sf_ticket","user","session_id"]:
                 st.session_state[k] = [] if k=="messages" else ("" if k=="issue_text" else None)
-            st.session_state.sf_resolution  = ""
-            st.session_state.sf_case_context = ""
+            _reset_chat_state()
             st.session_state.page = "chat"; st.rerun()
     with c2:
         if st.button("💬 Back to Chat", use_container_width=True):

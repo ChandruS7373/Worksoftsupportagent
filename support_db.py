@@ -7,8 +7,10 @@ import re
 import sqlite3
 from datetime import datetime
 
-_DIR    = os.path.dirname(os.path.abspath(__file__))
-DB_PATH = os.environ.get("SUPPORT_DB_PATH", os.path.join(_DIR, "worksoft_support.db"))
+DB_PATH = os.environ.get(
+    "SUPPORT_DB_PATH",
+    r"C:\Users\ChandruS\Downloads\Worksoft Support Agent\worksoft_support.db"
+)
 
 
 def get_conn():
@@ -251,8 +253,7 @@ def search_knowledge(query: str = "", top_n: int = 3) -> list:
     conn = get_conn()
     rows = conn.execute(
         "SELECT * FROM sf_knowledge "
-        "WHERE LOWER(TRIM(status)) != 'closed' "
-        "  AND (LENGTH(TRIM(comments)) > 10 "
+        "WHERE (LENGTH(TRIM(comments)) > 10 "
         "   OR LENGTH(TRIM(description)) > 10 "
         "   OR LENGTH(TRIM(subject)) > 5) "
         "ORDER BY synced_at DESC LIMIT 500"
@@ -303,6 +304,19 @@ def get_cases_with_comments(limit: int = 10) -> list:
     return [dict(r) for r in rows]
 
 
+def get_case_pool(limit: int = 150) -> list:
+    """Return case subjects + first 300 chars of content for AI case selection."""
+    conn = get_conn()
+    rows = conn.execute(
+        """SELECT sf_case_id, case_number, subject,
+               SUBSTR(COALESCE(NULLIF(TRIM(comments),''), NULLIF(TRIM(description),''), ''), 1, 500) AS snippet
+           FROM sf_knowledge ORDER BY synced_at DESC LIMIT ?""",
+        (limit,)
+    ).fetchall()
+    conn.close()
+    return [dict(r) for r in rows]
+
+
 def get_all_case_subjects() -> list:
     """Return sf_case_id + subject for every cached case (for AI case identification)."""
     conn = get_conn()
@@ -325,6 +339,54 @@ def get_cases_by_ids(sf_case_ids: list) -> list:
     ).fetchall()
     conn.close()
     return [dict(r) for r in rows]
+
+
+# ── CSV import ───────────────────────────────────────────────
+def import_csv_knowledge(csv_path: str) -> tuple:
+    """
+    Import Worksoft Support Queries CSV into sf_knowledge.
+    Columns expected: CaseNum, Question/Problem, Error Message,
+                      Root Cause, Resolution, Resolution Steps
+    """
+    import csv as _csv
+    if not os.path.exists(csv_path):
+        return 0, f"File not found: {csv_path}"
+    imported, skipped = 0, 0
+    try:
+        enc = "utf-8-sig"
+        for try_enc in ("utf-8-sig", "cp1252", "latin-1"):
+            try:
+                open(csv_path, encoding=try_enc).read(512); enc = try_enc; break
+            except Exception: pass
+        with open(csv_path, newline="", encoding=enc) as f:
+            reader = _csv.DictReader(f)
+            for row in reader:
+                case_num   = str(row.get("CaseNum",           "") or "").strip()
+                subject    = str(row.get("Question/Problem",  "") or "").strip()
+                error_msg  = str(row.get("Error Message",     "") or "").strip()
+                root_cause = str(row.get("Root Cause",        "") or "").strip()
+                resolution = str(row.get("Resolution",        "") or "").strip()
+                res_steps  = str(row.get("Resolution Steps",  "") or "").strip()
+                if not case_num:
+                    skipped += 1
+                    continue
+                desc_parts = []
+                if error_msg:  desc_parts.append(f"Error: {error_msg}")
+                if root_cause: desc_parts.append(f"Root Cause: {root_cause}")
+                upsert_sf_case(
+                    sf_case_id  = f"CSV-{case_num}",
+                    case_number = case_num,
+                    subject     = subject,
+                    description = "\n".join(desc_parts),
+                    status      = "Closed",
+                    resolution  = resolution,
+                    comments    = res_steps,
+                )
+                imported += 1
+    except Exception as exc:
+        return imported, f"❌ Import error: {exc}"
+    update_sync_log(imported)
+    return imported, f"✅ Imported {imported} cases from CSV."
 
 
 # ── Stats ─────────────────────────────────────────────────────

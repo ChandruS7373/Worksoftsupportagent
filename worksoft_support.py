@@ -350,7 +350,8 @@ def _init_state():
         "fu_key":        0,
         "pending_file":  None,
         "session_id":    None,
-        "sf_resolution": "",   # full resolution text for step-by-step chat
+        "sf_resolution":   "",   # full resolution text for step-by-step chat
+        "sf_case_context": "",   # error + root cause for AI-enriched steps
     }
     for k, v in defaults.items():
         if k not in st.session_state:
@@ -907,13 +908,22 @@ def _identify_relevant_cases(user_query: str, all_subjects: list) -> list:
     return valid_ids
 
 
+_GREET_WORDS = {"hi","hello","hey","hii","helo","heya","howdy","greetings",
+                "morning","afternoon","evening","sup","yo","namaste","hai","hola"}
+_GREETINGS   = _GREET_WORDS | {
+    "good morning","good afternoon","good evening","good day",
+    "what's up","whats up","hi there","hey there","hello there",
+    "hi all","hello all",
+}
+
+_EXPERT_PERSONA = (
+    "You are an expert Worksoft Certify support engineer at Qualesce with deep knowledge of "
+    "Worksoft CTM (Continuous Testing Manager), Certify, Portal, Capture, and agent machines. "
+    "You help users fix their Worksoft issues through clear, confident, step-by-step guidance."
+)
+
+
 def groq_chat(text: str, history: list, file_data: dict = None) -> str:
-    """
-    AI-driven step-by-step chat.
-    - First message: finds matching SF case, stores full resolution, gives Step 1.
-    - Follow-up messages: Groq reads the conversation + full resolution and
-      continues naturally — next step, answers questions, wraps up.
-    """
     if file_data and file_data["type"] == "image":
         query = _image_to_query(file_data, text)
     elif file_data and file_data["type"] == "text":
@@ -922,15 +932,7 @@ def groq_chat(text: str, history: list, file_data: dict = None) -> str:
         query = text
 
     # ── Greeting detection ──────────────────────────────────
-    _GREET_WORDS = {"hi","hello","hey","hii","helo","heya","howdy","greetings",
-                    "morning","afternoon","evening","sup","yo","namaste","hai","hola"}
-    _GREETINGS   = _GREET_WORDS | {
-        "good morning","good afternoon","good evening","good day",
-        "what's up","whats up","hi there","hey there","hello there",
-        "hi all","hello all",
-    }
     clean = re.sub(r"[^a-z\s']", "", text.lower()).strip()
-    # Match exact phrase OR first word is a greeting and message is very short (≤4 words)
     first_word = clean.split()[0] if clean.split() else ""
     is_greeting = (
         clean in _GREETINGS
@@ -943,67 +945,91 @@ def groq_chat(text: str, history: list, file_data: dict = None) -> str:
         name = f" {user['name'].split()[0]}" if user else ""
         return _ask_groq(
             system_prompt=(
-                "You are a friendly Worksoft Certify AI support agent at Qualesce. "
+                f"{_EXPERT_PERSONA} "
                 "The user has greeted you. Respond warmly in 2-3 sentences: "
-                "greet them back, introduce yourself briefly, and ask what Worksoft issue they need help with today."
+                "greet them by name, introduce yourself, and invite them to describe "
+                "their Worksoft issue so you can help them step by step."
             ),
             user_prompt=f"User greeted: '{text}'. User name: {name.strip() or 'unknown'}.",
-            max_tokens=120,
+            max_tokens=130,
         ) or (
-            f"Hello{name}! 👋 I'm your Worksoft Certify AI support agent at Qualesce.\n\n"
-            "How can I help you today? Describe your issue and I'll walk you through the fix step by step."
+            f"Hello{name}! 👋 I'm your Worksoft Certify AI support engineer at Qualesce.\n\n"
+            "What Worksoft issue are you facing today? Describe it and I'll walk you through the fix step by step."
         )
 
-    # ── Continuing an active resolution with Groq ───────────
-    sf_resolution = st.session_state.get("sf_resolution", "")
+    # ── Continue active step-by-step resolution ─────────────
+    sf_resolution   = st.session_state.get("sf_resolution", "")
+    sf_case_context = st.session_state.get("sf_case_context", "")
     if sf_resolution:
-        # Build conversation history string for Groq
         chat_history = ""
-        for m in history[-10:]:  # last 10 messages for context
-            role = "Support Agent" if m["role"] == "assistant" else "User"
+        for m in history[-12:]:
+            role = "Support Engineer" if m["role"] == "assistant" else "User"
             chat_history += f"{role}: {m['content']}\n\n"
+
+        context_block = f"\nCase context:\n{sf_case_context}\n" if sf_case_context else ""
 
         reply = _ask_groq(
             system_prompt=(
-                "You are a friendly Worksoft Certify support specialist at Qualesce. "
-                "You are guiding a user through a troubleshooting process step by step. "
-                "You have the full resolution steps below. "
-                "Rules:\n"
-                "- Give ONE step at a time only.\n"
-                "- After each step say: 'Reply **next** when ready for the next step.'\n"
-                "- If the user says next/ok/continue/yes/sure/done — give the next step.\n"
-                "- If the user asks a question about a step — answer it briefly, then remind them to say next.\n"
-                "- If all steps are done — say the issue should be resolved and ask if it helped.\n"
-                "- Never give more than one step per reply.\n"
+                f"{_EXPERT_PERSONA} "
+                "You are guiding a user through a troubleshooting process one step at a time."
+                f"{context_block}"
                 f"\nFull resolution steps:\n{sf_resolution}"
+                "\n\nRules:"
+                "\n- Give ONE step at a time only."
+                "\n- For each step: state the action clearly, then in 1 sentence explain WHY this step matters."
+                "\n- After the step say: 'Reply **next** when you are ready for the next step.'"
+                "\n- If user says next / ok / continue / yes / sure / done → give the next step."
+                "\n- If the user asks a question → answer using your Worksoft expertise, then remind them to say next."
+                "\n- If the user reports an error during a step → diagnose it and give corrective advice."
+                "\n- If all steps are done → confirm the issue should be resolved, summarise what was done, and ask if it helped."
+                "\n- Never give more than one step per reply."
             ),
             user_prompt=(
-                f"Conversation so far:\n{chat_history}\n"
+                f"Conversation so far:\n{chat_history}"
                 f"User just said: {text}\n\n"
-                "Continue the step-by-step troubleshooting. Give only the next step."
+                "Continue the troubleshooting — give only the next step with a brief explanation of why it is needed."
             ),
-            max_tokens=350,
+            max_tokens=400,
         )
         if reply:
             return reply
 
-    # ── New question — find matching SF case ────────────────
-    st.session_state.sf_resolution = ""
+    # ── New question — reset and find matching case ──────────
+    st.session_state.sf_resolution   = ""
+    st.session_state.sf_case_context  = ""
 
-    rows = _load_sf_cases()
-    if not rows:
-        return "No Salesforce cases available. Please contact support."
+    rows    = _load_sf_cases()
+    matches = _search_sf_cases(query, rows) if rows else []
 
-    matches = _search_sf_cases(query, rows)
+    # ── No match → AI general fallback ──────────────────────
     if not matches:
+        fallback = _ask_groq(
+            system_prompt=(
+                f"{_EXPERT_PERSONA} "
+                "No specific case was found for the user's issue. "
+                "Using your Worksoft expertise:\n"
+                "1. Acknowledge their issue in 1 sentence.\n"
+                "2. Give 2-3 practical general troubleshooting suggestions relevant to Worksoft Certify.\n"
+                "3. Ask them to share more details (error messages, screenshots) "
+                "or click 'Still need help' to raise a support ticket."
+            ),
+            user_prompt=f"User issue: {text}",
+            max_tokens=280,
+        )
+        if fallback:
+            return fallback
         return (
             "I couldn't find a matching Salesforce case for your issue.\n\n"
-            "Please click **'Still need help'** to raise a support ticket."
+            "Try describing the exact error message you're seeing — or click "
+            "**'Still need help'** to raise a support ticket with the IT Admin."
         )
 
-    best      = matches[0]
-    problem   = str(best.get("Question/Problem", "your issue")).strip()
-    raw_steps = str(best.get("Resolution Steps", "")).strip()
+    # ── Build case context ────────────────────────────────────
+    best       = matches[0]
+    problem    = str(best.get("Question/Problem", "")).strip()
+    error_msg  = str(best.get("Error Message",    "")).strip()
+    root_cause = str(best.get("Root Cause",       "")).strip()
+    raw_steps  = str(best.get("Resolution Steps", "")).strip()
     if not raw_steps:
         raw_steps = str(best.get("Resolution", "")).strip()
 
@@ -1013,33 +1039,46 @@ def groq_chat(text: str, history: list, file_data: dict = None) -> str:
             "Please click **'Still need help'** to raise a support ticket."
         )
 
-    # Store resolution in session so follow-ups can continue
-    st.session_state.sf_resolution = raw_steps
+    context_parts = []
+    if problem:    context_parts.append(f"Issue type: {problem}")
+    if error_msg:  context_parts.append(f"Known error: {error_msg}")
+    if root_cause: context_parts.append(f"Root cause: {root_cause}")
+    case_context = "\n".join(context_parts)
 
-    # Ask Groq to introduce the case and give only Step 1
+    st.session_state.sf_resolution   = raw_steps
+    st.session_state.sf_case_context  = case_context
+
+    # ── First response: root cause + Step 1 ──────────────────
     reply = _ask_groq(
         system_prompt=(
-            "You are a friendly Worksoft Certify support specialist at Qualesce. "
-            "You found a matching Salesforce case. "
-            "Introduce the case in 1 sentence, then give ONLY Step 1 of the resolution. "
-            "End with: 'Reply **next** when you are ready for the next step.' "
-            "Never give more than one step."
+            f"{_EXPERT_PERSONA} "
+            "You found a matching case. Structure your reply as:\n"
+            "1. One sentence identifying the issue type.\n"
+            "2. One sentence explaining the root cause (use the case context below).\n"
+            "3. Step 1 of the resolution — state the action clearly, "
+            "then 1 sentence explaining why this step is needed.\n"
+            "4. End with: 'Reply **next** when you are ready for the next step.'\n"
+            "Never give more than one step. Be clear and conversational.\n"
+            f"\nCase context:\n{case_context}\n"
             f"\nFull resolution steps:\n{raw_steps}"
         ),
         user_prompt=(
             f"User issue: {text}\n"
             f"Matching case: {problem}\n\n"
-            "Introduce and give only Step 1."
+            "Introduce the issue with root cause, then give only Step 1 with a brief why."
         ),
-        max_tokens=300,
+        max_tokens=380,
     )
-
     if reply:
         return reply
 
-    # Groq unavailable — return first line as step 1
+    # Groq unavailable — plain fallback
     first_line = raw_steps.splitlines()[0].strip()
-    return f"**{problem}**\n\nStep 1: {first_line}\n\nReply **next** when ready for the next step."
+    return (
+        f"**{problem}**\n\n"
+        f"Step 1: {first_line}\n\n"
+        "Reply **next** when ready for the next step."
+    )
 
 
 # ═══════════════════════════════════════════════════════════
@@ -1306,7 +1345,8 @@ def render_chat():
         if st.button("🔄 New Chat", use_container_width=True):
             for k in ["messages","issue_text","sf_ticket","user","pending_file"]:
                 st.session_state[k] = [] if k=="messages" else ("" if k=="issue_text" else None)
-            st.session_state.sf_resolution = ""
+            st.session_state.sf_resolution  = ""
+            st.session_state.sf_case_context = ""
             st.session_state.fu_key += 1
             st.session_state.page = "chat"; st.rerun()
 
@@ -1342,7 +1382,8 @@ def render_resolved():
                 support_db.update_session_status(sid, "resolved")
             for k in ["messages","issue_text","sf_ticket","user","session_id"]:
                 st.session_state[k] = [] if k=="messages" else ("" if k=="issue_text" else None)
-            st.session_state.sf_resolution = ""
+            st.session_state.sf_resolution  = ""
+            st.session_state.sf_case_context = ""
             st.session_state.page = "chat"; st.rerun()
 
 
@@ -1498,7 +1539,8 @@ def _render_ticket(user, ticket):
         if st.button("🆕 New Chat", use_container_width=True, type="primary"):
             for k in ["messages","issue_text","sf_ticket","user","session_id"]:
                 st.session_state[k] = [] if k=="messages" else ("" if k=="issue_text" else None)
-            st.session_state.sf_resolution = ""
+            st.session_state.sf_resolution  = ""
+            st.session_state.sf_case_context = ""
             st.session_state.page = "chat"; st.rerun()
     with c2:
         if st.button("💬 Back to Chat", use_container_width=True):

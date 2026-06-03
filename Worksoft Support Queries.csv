@@ -1,0 +1,57 @@
+CaseNum,Question/Problem,Criticality (Low/High),Product (Portal/Capture/Certify/CTM/WRS),Error Message,Root Cause,Resolution,Resolution Steps,Reviewer,Date
+50028,CTM portal and Configuration Issue,High,CTM,An unexpected error occured and not able to trigger any suites from CTM and CTM agent is not getting registered,"After updating the Portal DB, the Portal UI is not loadng","Created new Databases to Authentication, Portal, CTM and scheduler service","1.Cross verified by loading the Authentication URL and restarted the IIS services but no luck.
+2.Removed Connection string from Authentication, Portal, CTM and scheduler service.
+3.Created new Databases to Authentication, Portal, CTM and scheduler service.
+4.Registered all the services to Portal.
+5.Portal and CTM were working as expected without any error popups.
+6.Registerd Certify DB to the Portal
+7.Added Licenses to Portal.
+8.Verified CTM agent was registered under CTM UI->Configuration->Desktop Machines.
+9.Added Desktop Credential.
+10.Created Test Suite for CTM.
+11.CTM was working without any issues",Anu Sree,04-02-2026
+64710,Issue accessing and scheduling execution on CTM,High,CTM,,,"1.From Sql server / checked the reprots and physical indexes and notices some tables should be rebuilded or reorganized.
+2.Then executed the SQL Query AbortpendingToAbortnew and it's started working as expected
+ ","1.Logged into the application server where CTM is installed.
+2.Opened Notepad as Administrator and verified the Scheduler Base URL was using HTTPS.
+3.Restarted the Scheduler Application Pool in IIS.
+4.Restarted Scheduler services from Services.
+5.Desktop machines became visible, but after refresh an error appeared:
+“An unexpected error occurred. Please contact your system Administrator.”
+6.Verified the connection string.
+7.Checked SQL Server reports and indexes; identified tables needing rebuild/reorganize.
+8.Executed the SQL query AbortpendingToAbortnew.
+9.Issue resolved and system started working as expected.",Anu Sree,05-02-2026
+64719,Facing error in CTM,High,CTM,Executor application failed to open in a timely fashion,The issue was occurring due to timeout issue as something was stopping the agent to work, Disabled the prompt up notifications in window settings.,"1.Logged into the CTM agent machine.
+2.Verified Worksoft CTM Agent Executor is enabled in Startup apps.
+3.Updated appsettings.config in Program Files (x86)\Worksoft\CTM Agent Manager:
+Login failure timeout ? 6 minutes
+Execution failure timeout ? 12 minutes
+RDP wait time ? 80 seconds
+4.Identified the issue as a timeout-related agent interruption.
+5.Disabled Windows pop-up notifications.
+6.Executed the suite successfully.",Anu Sree,05-02-2026
+64737,CTM - Machine Desktop - Not Running,High,CTM,"CTM desktop machine status is showing ""Not Running""",,Restart the CTM agent service and CTM portal application in IIS,"Vertified thee CTM agent installation on the agent machine and restarted the agent services. 
+On the CTM server, disabled the Worksoft auto-update and restarted CTM services. 
+ Then restarted the CTM portal application pool in IIS.
+CTM suite was  executed successfully
+ ",Anu Sree,09-02-2026
+64779,CTM_TEst suite is not getting aborted,Medium,CTM,"One of the suite was stuck on ""Abort Pending""",Test suite is not getting aborted,Recommended customer run DB_Abort_Pending SQL query against CTM database as the only current workaround to prevent recurrence.,"1.Issue observed: Suite stuck in “Abort Pending” (intermittent).
+2.Previously, customer cleared it by logging into Agent machine and force-killing SAP, Certify sessions, and user via Task Manager.
+3.CTM Agent logs (C:\Program Files (x86)\Worksoft\logs\AgentService.log) show only one error: Agent forcefully terminated by another user 
+4.Certify logs showed CertifyAPI configured with http://localhost.
+5.Logged into CertifyAPI server, launched Portal, selected CertifyAPI from Product Configuration, and deregistered services.
+6.Restarted CertifyAPI application pool, relaunched API URL, and verified CertifyAPI re-registered with localhost.
+7.Updated Portal DB ? dbo.product table to replace localhost with HTTPS FQDN for the API.
+After Portal refresh, API showed correct URL, but endpoint remained unreachable (known issue in Certify v12).
+8.Recommended customer run DB_Abort_Pending SQL query against CTM database as the only current workaround to prevent recurrence.
+9.Customer will take a full CTM DB backup before running the query.",Anu Sree,09-02-2026
+64782,CTM Session timeout issue,Medium,CTM,Session timeout Issue when we schedule Jobs from CTM,Some sort of idle timeout on the CTM Client,Make the session active,"Please edit the following file on the CTM client : -
+C:\Program Files (x86)\Worksoft\Worksoft Continuous Testing Manager Agent\appsettings.config
+Amend the following line from:-
+<add key=""MouseMoveTimeoutDuration"" value=""60000"" />
+to
+<add key=""MouseMoveTimeoutDuration"" value=""6000"" />
+CTM will now move the mouse pointer every 6 seconds to keep the session active during an execution. After doing this the CTM Windows service will need to be restarted on the client.",Anu Sree,10-02-2026
+64808,CTM_Dekstop Machines being removed automatically,High,CTM,Desktop Machines configured in CTM are being removed automatically,,"In agent machine,from service disable worksoft auto update serviceand restart the CTM agent service.","1)Please navigate to all the agent machines, from services disable worksoft auto update services from all the agent machines and restart the ctm agent services.
+2)Right click on CTM agent service, Properties->Recovery-> restart first failure and second failure from recovery.",Anu Sree,10-02-2026

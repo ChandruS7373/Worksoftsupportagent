@@ -14,12 +14,14 @@ import time
 import requests
 from datetime import datetime
 
-_DB_PATH       = os.path.join(os.path.dirname(os.path.abspath(__file__)), "worksoft_support.db")
-_PUSH_INTERVAL = 5    # seconds between file-change checks (near-real-time)
-_lock          = threading.Lock()
-_db_downloaded = False
-_sync_started  = False
-_push_queue    = threading.Event()  # set this to trigger an immediate push
+_DB_PATH              = os.path.join(os.path.dirname(os.path.abspath(__file__)), "worksoft_support.db")
+_PUSH_INTERVAL        = 5    # seconds between file-change checks (near-real-time)
+_lock                 = threading.Lock()
+_db_downloaded        = False
+_sync_started         = False
+_push_queue           = threading.Event()  # set this to trigger an immediate push
+_last_download_attempt = 0.0               # epoch time of last download attempt
+_DOWNLOAD_COOLDOWN    = 60                 # min seconds between retry attempts
 
 
 # ── Config ──────────────────────────────────────────────────────────────────
@@ -59,14 +61,31 @@ def download_db() -> bool:
         url  = f"https://api.github.com/repos/{repo}/contents/{db_path}?ref={branch}"
         resp = requests.get(url, headers=_headers(token), timeout=30)
         if resp.status_code == 200:
-            raw_url  = resp.json().get("download_url", "")
-            raw_resp = requests.get(raw_url, headers=_headers(token), timeout=60)
-            if raw_resp.status_code == 200:
+            data = resp.json()
+            # Prefer inline base64 content — direct from API, no CDN caching
+            raw_b64 = (data.get("content") or "").replace("\n", "")
+            if raw_b64:
+                raw = base64.b64decode(raw_b64)
                 with _lock:
                     with open(_DB_PATH, "wb") as f:
-                        f.write(raw_resp.content)
-                print("[GH Sync] DB downloaded from GitHub.")
+                        f.write(raw)
+                print(f"[GH Sync] DB downloaded from GitHub ({len(raw) // 1024} KB).")
                 return True
+            # File > 1 MB: fall back to download_url with cache-busting
+            raw_url = data.get("download_url", "")
+            if raw_url:
+                sep = "&" if "?" in raw_url else "?"
+                raw_resp = requests.get(
+                    f"{raw_url}{sep}_={int(time.time())}",
+                    headers={"Authorization": f"token {token}", "Cache-Control": "no-cache"},
+                    timeout=60,
+                )
+                if raw_resp.status_code == 200:
+                    with _lock:
+                        with open(_DB_PATH, "wb") as f:
+                            f.write(raw_resp.content)
+                    print(f"[GH Sync] DB downloaded from GitHub ({len(raw_resp.content) // 1024} KB, download_url).")
+                    return True
         elif resp.status_code == 404:
             print("[GH Sync] No DB in repo yet — will create on first push.")
     except Exception as e:
@@ -97,21 +116,39 @@ def push_db(message: str = "") -> tuple:
             with open(_DB_PATH, "rb") as f:
                 content = base64.b64encode(f.read()).decode()
 
-        url  = f"https://api.github.com/repos/{repo}/contents/{db_path}"
-        resp = requests.get(f"{url}?ref={branch}", headers=_headers(token), timeout=30)
-        sha  = resp.json().get("sha", "") if resp.status_code == 200 else ""
+        url = f"https://api.github.com/repos/{repo}/contents/{db_path}"
 
-        commit_msg = message or f"sync: update DB [{datetime.now().strftime('%Y-%m-%d %H:%M')}]"
-        payload    = {"message": commit_msg, "content": content, "branch": branch}
-        if sha:
-            payload["sha"] = sha
+        def _get_sha() -> str:
+            r = requests.get(f"{url}?ref={branch}", headers=_headers(token), timeout=30)
+            return r.json().get("sha", "") if r.status_code == 200 else ""
 
-        put = requests.put(url, json=payload, headers=_headers(token), timeout=60)
+        def _do_put(sha: str):
+            commit_msg = message or f"sync: update DB [{datetime.now().strftime('%Y-%m-%d %H:%M')}]"
+            payload = {"message": commit_msg, "content": content, "branch": branch}
+            if sha:
+                payload["sha"] = sha
+            return requests.put(url, json=payload, headers=_headers(token), timeout=60)
+
+        sha = _get_sha()
+        put = _do_put(sha)
+
         if put.status_code in (200, 201):
             size_kb = os.path.getsize(_DB_PATH) // 1024
             action  = "updated" if sha else "created"
             print(f"[GH Sync] DB {action} on GitHub ({size_kb} KB).")
             return True, f"DB {action} on GitHub ({size_kb} KB)."
+        elif put.status_code == 409:
+            # SHA conflict — background thread may have just pushed; retry with fresh SHA
+            sha2 = _get_sha()
+            if sha2:
+                put2 = _do_put(sha2)
+                if put2.status_code in (200, 201):
+                    size_kb = os.path.getsize(_DB_PATH) // 1024
+                    print(f"[GH Sync] DB updated on GitHub ({size_kb} KB, retry ok).")
+                    return True, f"DB updated on GitHub ({size_kb} KB)."
+            # Background thread already pushed the same data — treat as success
+            print("[GH Sync] Push skipped (already up-to-date on GitHub).")
+            return True, "DB already up-to-date on GitHub."
         else:
             err = put.json().get("message", put.text[:200])
             print(f"[GH Sync] Push failed ({put.status_code}): {err}")
@@ -151,12 +188,37 @@ def push_now():
     _push_queue.set()
 
 
+def _has_local_data() -> bool:
+    """Return True if the local DB already has sf_knowledge rows."""
+    if not os.path.exists(_DB_PATH):
+        return False
+    try:
+        conn = sqlite3.connect(_DB_PATH, timeout=5)
+        count = conn.execute("SELECT COUNT(*) FROM sf_knowledge").fetchone()[0]
+        conn.close()
+        return count > 0
+    except Exception:
+        return False
+
+
 def ensure_db_downloaded():
-    """Call once at app startup — always fetches DB from GitHub on first process run."""
-    global _db_downloaded
+    """
+    Call at app startup — downloads DB from GitHub when needed:
+    - First call this process: always download.
+    - Subsequent reruns in same process: re-download only if local DB is empty
+      (handles case where the previous download failed silently).
+    - Cooldown of 60 s prevents hammering GitHub API on every rerun.
+    """
+    global _db_downloaded, _last_download_attempt
+    now = time.time()
     if not _db_downloaded:
         _db_downloaded = True
-        download_db()  # always fetch; if repo has no DB yet, download_db() is a safe no-op
+        _last_download_attempt = now
+        download_db()
+    elif not _has_local_data() and (now - _last_download_attempt) > _DOWNLOAD_COOLDOWN:
+        # Local DB is empty — retry GitHub download (previous attempt may have failed)
+        _last_download_attempt = now
+        download_db()
 
 
 def start_sync_thread():

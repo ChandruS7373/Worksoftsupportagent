@@ -57,280 +57,255 @@ st.set_page_config(
 # ═══════════════════════════════════════════════════════════
 st.markdown("""
 <style>
-/* ── Global ─────────────────────────────────────────────── */
-html,body,[data-testid="stAppViewContainer"]{
-  background:#f0f4ff!important;min-height:100vh;
-}
-[data-testid="stMain"]{position:relative;z-index:1;}
-header[data-testid="stHeader"]{display:none!important;}
+/* ── RESET ── */
+*{box-sizing:border-box;margin:0;padding:0;}
+html,body,[data-testid="stAppViewContainer"]{background:#f0f4ff!important;}
+header,#MainMenu,footer,.stDeployButton{display:none!important;}
 [data-testid="stSidebar"]{display:none!important;}
-#MainMenu,footer,.stDeployButton{display:none!important;}
 [data-testid="stMain"]>div{padding-top:0!important;}
-.block-container{padding-top:0!important;padding-bottom:120px!important;}
+.block-container{max-width:100%!important;padding:4px 12px 0!important;}
 
-/* ── Navbar ─────────────────────────────────────────────── */
-.qnav{
-  background:linear-gradient(90deg,#0f172a 0%,#1e3a5f 60%,#1e40af 100%);
-  box-shadow:0 4px 24px rgba(30,64,175,.35);
-  padding:0 24px;display:flex;align-items:center;justify-content:space-between;
-  height:60px;border-radius:0 0 16px 16px;margin-bottom:20px;
+/* ── NAVBAR ── */
+.nav{
+  height:52px;background:#fff;
+  border-bottom:2px solid #e0e7ff;
+  display:flex;align-items:center;justify-content:space-between;
+  padding:0 20px;margin-bottom:10px;border-radius:14px;
+  box-shadow:0 1px 8px rgba(99,102,241,.08);
 }
-.qnav-brand{display:flex;align-items:center;gap:12px;}
-.qnav-logo{
-  width:36px;height:36px;border-radius:10px;flex-shrink:0;
-  background:linear-gradient(135deg,#2563eb,#0ea5e9);
+.nav-left{display:flex;align-items:center;gap:10px;}
+.nav-logo{
+  width:34px;height:34px;border-radius:10px;flex-shrink:0;
+  background:linear-gradient(135deg,#1e40af,#3b82f6);
   display:flex;align-items:center;justify-content:center;
-  font-size:20px;font-weight:900;color:#fff;letter-spacing:-1px;
-  box-shadow:0 2px 10px rgba(59,130,246,.45);
+  font-size:18px;box-shadow:0 2px 8px rgba(59,130,246,.35);
 }
-.qnav-sep{width:1px;height:28px;background:rgba(255,255,255,.15);margin:0 2px;}
-.qnav-title{font-size:14px;font-weight:700;color:#e2e8f0;letter-spacing:.2px;}
-.qnav-right{display:flex;align-items:center;gap:12px;}
-.qnav-badge{
-  background:linear-gradient(135deg,#0ea5e9,#3b82f6);
-  color:#fff;font-size:10px;font-weight:700;padding:5px 13px;
-  border-radius:99px;letter-spacing:.6px;text-transform:uppercase;
-  box-shadow:0 2px 8px rgba(14,165,233,.35);
+.nav-title{font-size:14px;font-weight:800;color:#0f172a;letter-spacing:-.2px;}
+.nav-sub{font-size:10px;color:#94a3b8;margin-top:1px;}
+.nav-right{display:flex;align-items:center;gap:8px;}
+.nav-pill{
+  font-size:11px;font-weight:700;padding:4px 12px;border-radius:99px;
+  background:linear-gradient(135deg,#1e40af,#3b82f6);color:#fff;
+  letter-spacing:.4px;
 }
-.qnav-user{color:#94a3b8;font-size:12px;}
+.nav-user{font-size:12px;font-weight:600;color:#1e40af;
+  background:#eff6ff;border:1.5px solid #bfdbfe;
+  padding:4px 12px;border-radius:99px;}
 
-/* ── Bot header bar ─────────────────────────────────────── */
-.bot-bar{
-  background:linear-gradient(135deg,#0f172a 0%,#1e3a5f 55%,#1e40af 100%);
-  border-radius:18px;padding:16px 22px;margin-bottom:16px;
-  display:flex;align-items:center;gap:16px;
-  box-shadow:0 10px 36px rgba(30,64,175,.25);
+/* ── LEFT PANEL ── */
+.lp{
+  background:#1e293b;border-radius:16px;
+  padding:20px 16px;display:flex;flex-direction:column;gap:14px;
+  box-shadow:0 4px 20px rgba(15,23,42,.25);
 }
-.bot-av{
-  width:50px;height:50px;flex-shrink:0;
-  background:linear-gradient(135deg,#2563eb,#0ea5e9);
-  border-radius:14px;display:flex;align-items:center;
-  justify-content:center;font-size:24px;
-  box-shadow:0 4px 14px rgba(59,130,246,.5);
-}
-.bot-name{font-size:16px;font-weight:800;color:#f1f5f9;}
-.bot-sub{font-size:11px;color:#94a3b8;margin-top:2px;}
-.bot-pill{
+.lp-logo{display:flex;align-items:center;gap:10px;
+  padding-bottom:14px;border-bottom:1px solid rgba(255,255,255,.07);}
+.lp-av{width:38px;height:38px;border-radius:10px;flex-shrink:0;
+  background:linear-gradient(135deg,#1e40af,#3b82f6);
+  display:flex;align-items:center;justify-content:center;font-size:20px;
+  box-shadow:0 2px 10px rgba(59,130,246,.4);}
+.lp-t{font-size:13px;font-weight:800;color:#f1f5f9;}
+.lp-s{font-size:10px;color:#64748b;margin-top:1px;}
+.lp-status{
   display:inline-flex;align-items:center;gap:5px;
-  background:rgba(22,163,74,.15);border:1px solid rgba(22,163,74,.3);
+  background:rgba(34,197,94,.1);border:1px solid rgba(34,197,94,.2);
   color:#4ade80;font-size:10px;font-weight:700;
-  padding:3px 10px;border-radius:99px;margin-top:6px;
-  text-transform:uppercase;letter-spacing:.4px;
+  padding:4px 10px;border-radius:99px;text-transform:uppercase;letter-spacing:.4px;
+  width:fit-content;
 }
-.dp{width:5px;height:5px;border-radius:50%;background:#4ade80;
-    animation:dp 1.6s ease-in-out infinite;}
-@keyframes dp{0%,100%{opacity:1;transform:scale(1)}50%{opacity:.4;transform:scale(1.4)}}
+.lp-dot{width:5px;height:5px;border-radius:50%;background:#22c55e;
+  animation:pulse 1.6s infinite;}
+@keyframes pulse{0%,100%{opacity:1;transform:scale(1)}50%{opacity:.4;transform:scale(1.4)}}
+.lp-sec-title{font-size:9px;font-weight:700;color:#475569;
+  text-transform:uppercase;letter-spacing:.8px;margin-bottom:4px;}
+.lp-stat{background:rgba(255,255,255,.05);border:1px solid rgba(255,255,255,.07);
+  border-radius:10px;padding:12px 14px;}
+.lp-num{font-size:26px;font-weight:900;color:#e2e8f0;line-height:1;}
+.lp-numlbl{font-size:10px;color:#64748b;margin-top:3px;}
+.lp-feature{display:flex;align-items:center;gap:8px;padding:5px 0;
+  border-bottom:1px solid rgba(255,255,255,.04);font-size:11px;color:#94a3b8;}
+.lp-feature:last-child{border-bottom:none;}
+.lp-user{
+  margin-top:auto;background:rgba(255,255,255,.04);
+  border:1px solid rgba(255,255,255,.07);border-radius:10px;padding:10px 12px;
+}
+.lp-uname{font-size:12px;font-weight:700;color:#e2e8f0;}
+.lp-uemail{font-size:10px;color:#64748b;margin-top:2px;}
 
-/* ── Welcome card ───────────────────────────────────────── */
-.welcome-card{
-  background:rgba(255,255,255,.82);backdrop-filter:blur(18px);
-  border:1.5px solid rgba(30,64,175,.12);border-radius:18px;
-  box-shadow:0 8px 28px rgba(30,64,175,.10);
-  padding:22px 28px;margin:0 0 16px;
+/* ── CHAT WINDOW ── */
+.cwin{
+  background:#fff;border-radius:16px;
+  border:1.5px solid #e0e7ff;
+  box-shadow:0 4px 20px rgba(99,102,241,.08);
+  overflow:hidden;
 }
-.welcome-title{font-size:16px;font-weight:800;color:#0f172a;margin-bottom:4px;}
-.welcome-sub{font-size:13px;color:#64748b;}
+.chead{
+  height:58px;display:flex;align-items:center;justify-content:space-between;
+  padding:0 18px;background:#fff;
+  border-bottom:1.5px solid #f1f5f9;
+}
+.chead-left{display:flex;align-items:center;gap:10px;}
+.chead-av{
+  width:36px;height:36px;border-radius:10px;flex-shrink:0;
+  background:linear-gradient(135deg,#1e40af,#3b82f6);
+  display:flex;align-items:center;justify-content:center;font-size:19px;
+  box-shadow:0 2px 8px rgba(59,130,246,.3);
+}
+.chead-name{font-size:13px;font-weight:800;color:#0f172a;}
+.chead-sub{font-size:10px;color:#64748b;margin-top:1px;}
+.chead-status{
+  display:inline-flex;align-items:center;gap:4px;
+  background:#f0fdf4;border:1px solid #bbf7d0;color:#16a34a;
+  font-size:9px;font-weight:700;padding:2px 8px;border-radius:99px;
+  text-transform:uppercase;letter-spacing:.3px;
+}
+.chead-dot{width:4px;height:4px;border-radius:50%;background:#22c55e;
+  animation:pulse 1.6s infinite;}
+.chead-rt{text-align:right;}
+.chead-rt-lbl{font-size:9px;color:#94a3b8;text-transform:uppercase;letter-spacing:.4px;}
+.chead-rt-val{font-size:11px;font-weight:700;color:#16a34a;}
 
-/* ── Chat messages ──────────────────────────────────────── */
-[data-testid="stChatMessage"]{
-  background:transparent!important;border:none!important;
-  padding:6px 0!important;
+/* ── INPUT BAR ── */
+.cinput{
+  background:#f8faff;border-top:1.5px solid #f1f5f9;
+  padding:10px 14px;
 }
-/* Bot bubble */
-[data-testid="stChatMessage"]:has([data-testid="stChatMessageAvatarAssistant"]) [data-testid="stChatMessageContent"],
-[data-testid="stChatMessage"]:not([data-testid*="user"]) [data-testid="stChatMessageContent"]{
-  background:#ffffff!important;
-  border:1px solid #e2e8f0!important;
-  border-radius:4px 18px 18px 18px!important;
-  padding:14px 18px!important;
-  font-size:14px!important;line-height:1.75!important;color:#1e293b!important;
-  box-shadow:0 2px 8px rgba(0,0,0,.06)!important;
-  max-width:82%!important;
-}
-/* User bubble */
-[data-testid="stChatMessage"]:has([data-testid="stChatMessageAvatarUser"]) [data-testid="stChatMessageContent"]{
-  background:linear-gradient(135deg,#2563eb,#1d4ed8)!important;
-  color:#fff!important;border:none!important;
-  border-radius:18px 4px 18px 18px!important;
-  padding:14px 18px!important;font-size:14px!important;line-height:1.75!important;
-  box-shadow:0 4px 14px rgba(37,99,235,.35)!important;
-  max-width:82%!important;
-}
-[data-testid="stChatMessageContent"] p{margin:0 0 8px!important;}
-[data-testid="stChatMessageContent"] ol,[data-testid="stChatMessageContent"] ul{margin:8px 0 8px 20px!important;}
-[data-testid="stChatMessageContent"] li{margin-bottom:6px!important;}
-[data-testid="stChatMessageContent"] strong{color:#1d4ed8!important;}
-[data-testid="stChatMessageContent"] code{background:#eff6ff!important;color:#2563eb!important;padding:2px 6px!important;border-radius:4px!important;}
 
-/* ── Resolution strip ───────────────────────────────────── */
-.res-row{display:flex;align-items:center;gap:10px;padding:6px 0 14px 52px;flex-wrap:wrap;}
-.res-label{font-size:12px;color:#64748b;font-weight:600;}
-
-/* ── Sticky input bar ───────────────────────────────────── */
-.input-wrap{
-  position:fixed;bottom:0;left:0;right:0;z-index:100;
-  background:linear-gradient(to top,#f0f4ff 80%,transparent);
-  padding:10px 16px 14px;
-}
+/* ── INPUT BOX ── */
 .input-box{
-  background:#fff;border:1.5px solid #c7d2fe;border-radius:16px;
-  padding:8px 10px;display:flex;align-items:flex-end;gap:6px;
-  box-shadow:0 4px 20px rgba(37,99,235,.12);
-  max-width:860px;margin:0 auto;
+  background:#fff;border:1.5px solid #dbeafe;border-radius:14px;
+  padding:6px 8px;display:flex;align-items:flex-end;gap:6px;
+  box-shadow:0 1px 6px rgba(99,102,241,.08);transition:.2s;
 }
-.input-box:focus-within{border-color:#2563eb!important;}
+.input-box:focus-within{border-color:#3b82f6!important;
+  box-shadow:0 2px 14px rgba(59,130,246,.15)!important;}
 
-/* ── File uploader — home page ──────────────────────────── */
-.home-upload div[data-testid="stFileUploader"]>label{
-  font-size:13px!important;font-weight:600!important;color:#374151!important;
-  margin-bottom:6px!important;display:block!important;
+/* ── INPUT TEXT AREA ── */
+.input-bar .stTextArea textarea{
+  background:transparent!important;border:none!important;
+  color:#0f172a!important;font-size:13px!important;
+  line-height:1.5!important;resize:none!important;
+  box-shadow:none!important;outline:none!important;padding:6px 4px!important;
 }
-.home-upload section[data-testid="stFileUploaderDropzone"]{
-  border:2px dashed #93c5fd!important;background:#f0f7ff!important;
-  border-radius:14px!important;padding:20px 16px!important;transition:all .2s!important;
-}
-.home-upload section[data-testid="stFileUploaderDropzone"]:hover{
-  border-color:#3b82f6!important;background:#dbeafe!important;
-}
-.home-upload section[data-testid="stFileUploaderDropzone"] button{
-  background:linear-gradient(135deg,#1e40af,#3b82f6)!important;
-  color:#fff!important;border:none!important;border-radius:8px!important;
-  font-size:12px!important;font-weight:700!important;
-  padding:7px 16px!important;cursor:pointer!important;
-  box-shadow:0 2px 8px rgba(30,64,175,.25)!important;
-  width:auto!important;height:auto!important;
-}
+.input-bar .stTextArea textarea::placeholder{color:#94a3b8!important;font-size:13px!important;}
+.input-bar .stTextArea textarea:focus{box-shadow:none!important;border:none!important;}
+.input-bar div[data-baseweb="textarea"]{background:transparent!important;border:none!important;}
+.input-bar .stTextArea label{display:none!important;}
+.input-bar [data-testid="stHorizontalBlock"]{align-items:center!important;}
+.input-bar [data-testid="stHorizontalBlock"] [data-testid="column"]{
+  display:flex!important;align-items:center!important;padding-bottom:0!important;}
 
-/* ── Chat bar file uploader ──────────────────────────────── */
+/* ── FILE UPLOADER IN BAR ── */
 div[data-testid="stFileUploader"]{min-height:0!important;}
 div[data-testid="stFileUploader"]>label{display:none!important;}
 section[data-testid="stFileUploaderDropzone"]{
-  min-height:44px!important;max-height:44px!important;
-  padding:0 6px!important;
-  border:1.5px solid #bfdbfe!important;
-  background:#eff6ff!important;
-  border-radius:10px!important;
-  display:flex!important;align-items:center!important;justify-content:center!important;
-  overflow:hidden!important;
-}
+  min-height:38px!important;max-height:38px!important;padding:0 4px!important;
+  border:1.5px solid #bfdbfe!important;background:#eff6ff!important;
+  border-radius:10px!important;display:flex!important;align-items:center!important;
+  justify-content:center!important;overflow:hidden!important;}
 section[data-testid="stFileUploaderDropzone"]>div{
   flex-direction:row!important;gap:0!important;align-items:center!important;
-  width:100%!important;justify-content:center!important;
-}
+  width:100%!important;justify-content:center!important;}
 section[data-testid="stFileUploaderDropzone"]>div>div:first-child{display:none!important;}
 section[data-testid="stFileUploaderDropzone"] button{
-  background:transparent!important;border:none!important;
-  padding:0!important;min-height:0!important;width:auto!important;height:auto!important;
+  background:transparent!important;border:none!important;padding:0!important;
+  min-height:0!important;width:auto!important;height:auto!important;
   font-size:0!important;cursor:pointer!important;box-shadow:none!important;
-  display:flex!important;align-items:center!important;justify-content:center!important;
-}
+  display:flex!important;align-items:center!important;justify-content:center!important;}
 section[data-testid="stFileUploaderDropzone"] button::before{
-  content:"📎";font-size:22px;line-height:1;display:block;
-}
-section[data-testid="stFileUploaderDropzone"] button:hover::before{
-  content:"📎";opacity:.75;
-}
+  content:"📎";font-size:18px;line-height:1;display:block;}
 div[data-testid="stFileUploader"] small{display:none!important;}
 [data-testid="stFileUploaderDeleteBtn"]{color:#dc2626!important;}
 div[data-testid="stFileUploader"] [data-testid="stFileUploaderFile"]{
-  font-size:11px!important;max-width:120px!important;overflow:hidden!important;
-  white-space:nowrap!important;text-overflow:ellipsis!important;
-}
+  font-size:10px!important;max-width:100px!important;overflow:hidden!important;
+  white-space:nowrap!important;text-overflow:ellipsis!important;}
 
-/* ── Text area inside bar ───────────────────────────────── */
-.input-bar .stTextArea textarea{
-  background:transparent!important;border:none!important;
-  color:#0f172a!important;font-size:14px!important;
-  line-height:1.6!important;resize:none!important;
-  box-shadow:none!important;outline:none!important;padding:8px 6px!important;
-}
-.input-bar .stTextArea textarea::placeholder{color:#94a3b8!important;}
-.input-bar .stTextArea textarea:focus{box-shadow:none!important;border:none!important;}
-.input-bar div[data-baseweb="textarea"]{background:transparent!important;border:none!important;}
-.input-bar [data-testid="stHorizontalBlock"]{align-items:center!important;}
-.input-bar [data-testid="stHorizontalBlock"] [data-testid="column"]{
-  display:flex!important;align-items:center!important;padding-bottom:0!important;
-}
+/* ── HOME FILE UPLOADER ── */
+.home-upload div[data-testid="stFileUploader"]>label{
+  font-size:12px!important;font-weight:600!important;color:#374151!important;
+  margin-bottom:4px!important;display:block!important;}
+.home-upload section[data-testid="stFileUploaderDropzone"]{
+  border:2px dashed #93c5fd!important;background:#f0f7ff!important;
+  border-radius:12px!important;padding:16px!important;
+  min-height:auto!important;max-height:none!important;}
+.home-upload section[data-testid="stFileUploaderDropzone"] button{
+  background:linear-gradient(135deg,#1e40af,#3b82f6)!important;
+  color:#fff!important;border:none!important;border-radius:7px!important;
+  font-size:12px!important;font-weight:700!important;padding:6px 14px!important;
+  cursor:pointer!important;width:auto!important;height:auto!important;}
 
-/* ── Form submit buttons ─────────────────────────────────── */
+/* ── SEND BUTTON ── */
 .stFormSubmitButton button{
   background:linear-gradient(135deg,#1e40af,#3b82f6)!important;
-  color:#fff!important;border:none!important;
-  border-radius:10px!important;font-weight:700!important;
-  box-shadow:0 4px 14px rgba(30,64,175,.28)!important;
-  transition:all .2s!important;
+  color:#fff!important;border:none!important;border-radius:10px!important;
+  font-weight:700!important;box-shadow:0 2px 10px rgba(37,99,235,.3)!important;
+  transition:all .18s!important;
 }
 .stFormSubmitButton button:hover{
-  box-shadow:0 6px 20px rgba(30,64,175,.45)!important;transform:translateY(-1px)!important;
-}
+  box-shadow:0 4px 16px rgba(37,99,235,.45)!important;transform:translateY(-1px)!important;}
 .input-bar .stFormSubmitButton button{
-  height:44px!important;width:44px!important;
-  padding:0!important;font-size:20px!important;
-  min-height:0!important;border-radius:12px!important;
-}
+  height:38px!important;width:38px!important;padding:0!important;
+  font-size:18px!important;min-height:0!important;border-radius:10px!important;}
 
-/* ── All regular buttons ─────────────────────────────────── */
+/* ── BUTTONS ── */
 .stButton>button{
-  border-radius:10px!important;font-weight:700!important;font-size:13px!important;
-  padding:10px 22px!important;transition:all .2s!important;
-  min-height:40px!important;line-height:1.2!important;
+  border-radius:10px!important;font-weight:600!important;font-size:12px!important;
+  padding:7px 16px!important;transition:all .18s!important;
+  min-height:34px!important;line-height:1.2!important;
 }
 .stButton>button[kind="primary"],button[kind="primary"]{
   background:linear-gradient(135deg,#1e40af,#3b82f6)!important;
   color:#fff!important;border:none!important;
-  box-shadow:0 4px 14px rgba(30,64,175,.30)!important;
-}
-.stButton>button[kind="primary"]:hover,button[kind="primary"]:hover{
-  box-shadow:0 6px 20px rgba(30,64,175,.45)!important;
-  transform:translateY(-1px)!important;
-}
+  box-shadow:0 2px 10px rgba(37,99,235,.28)!important;}
+.stButton>button[kind="primary"]:hover{
+  box-shadow:0 4px 16px rgba(37,99,235,.42)!important;transform:translateY(-1px)!important;}
 .stButton>button:not([kind="primary"]){
-  background:#ffffff!important;color:#1e40af!important;
-  border:2px solid #3b82f6!important;
-  box-shadow:0 2px 8px rgba(30,64,175,.12)!important;
-}
+  background:#fff!important;color:#1e40af!important;
+  border:1.5px solid #bfdbfe!important;}
 .stButton>button:not([kind="primary"]):hover{
-  background:#eff6ff!important;border-color:#1e40af!important;
-  box-shadow:0 4px 14px rgba(30,64,175,.20)!important;
-  transform:translateY(-1px)!important;
-}
+  background:#eff6ff!important;border-color:#3b82f6!important;transform:translateY(-1px)!important;}
 
-/* ── Ticket card ────────────────────────────────────────── */
-.ticket-card{
-  background:rgba(255,255,255,.92);
-  border:2px solid #bfdbfe;border-radius:20px;
-  box-shadow:0 8px 32px rgba(30,64,175,.12);
-  padding:24px 28px;margin:16px auto;max-width:500px;
-}
-.ticket-id{font-size:11px;font-weight:700;color:#1e40af;letter-spacing:.5px;text-transform:uppercase;}
-.ticket-num{font-size:26px;font-weight:900;color:#0f172a;margin:4px 0 14px;}
-.ticket-row{display:flex;gap:8px;align-items:flex-start;margin-bottom:8px;font-size:13px;}
-.ticket-lbl{color:#64748b;min-width:76px;flex-shrink:0;}
+/* ── FORM INPUTS ── */
+.stTextArea label,.stTextInput label{
+  font-size:12px!important;font-weight:600!important;color:#374151!important;}
+.stTextInput>div>div>input,.stTextArea>div>div>textarea{
+  background:#fff!important;color:#0f172a!important;
+  border:1.5px solid #c7d2fe!important;border-radius:10px!important;font-size:13px!important;}
+.stTextInput>div>div>input:focus,.stTextArea>div>div>textarea:focus{
+  border-color:#3b82f6!important;box-shadow:0 0 0 3px rgba(59,130,246,.1)!important;}
+[data-testid="stAlert"]{border-radius:12px!important;}
+
+/* ── LOGIN CARD ── */
+.login-wrap{max-width:500px;margin:20px auto;}
+.login-banner{
+  background:linear-gradient(135deg,#1e3a8a,#1e40af,#0ea5e9);
+  border-radius:18px 18px 0 0;padding:28px 28px 22px;text-align:center;}
+.login-icon{font-size:44px;margin-bottom:8px;}
+.login-title{font-size:20px;font-weight:900;color:#fff;letter-spacing:-.3px;}
+.login-sub{font-size:12px;color:rgba(255,255,255,.7);margin-top:5px;}
+.login-chips{display:flex;justify-content:center;gap:6px;flex-wrap:wrap;margin-top:12px;}
+.chip{font-size:10px;font-weight:700;padding:4px 11px;border-radius:99px;
+  background:rgba(255,255,255,.15);border:1px solid rgba(255,255,255,.25);color:#fff;}
+.login-body{
+  background:#fff;border-radius:0 0 18px 18px;
+  border:1.5px solid #e0e7ff;border-top:none;padding:22px 28px;}
+
+/* ── TICKET ── */
+.ticket-card{background:#fff;border:1.5px solid #bfdbfe;border-radius:18px;
+  box-shadow:0 4px 20px rgba(30,64,175,.08);padding:20px 24px;margin:12px auto;max-width:460px;}
+.ticket-id{font-size:10px;font-weight:700;color:#1e40af;letter-spacing:.5px;text-transform:uppercase;}
+.ticket-num{font-size:22px;font-weight:900;color:#0f172a;margin:3px 0 12px;}
+.ticket-row{display:flex;gap:8px;align-items:flex-start;margin-bottom:6px;font-size:12px;}
+.ticket-lbl{color:#64748b;min-width:70px;flex-shrink:0;}
 .ticket-val{color:#0f172a;font-weight:600;word-break:break-all;}
 .ticket-link{
-  display:inline-flex;align-items:center;gap:6px;margin-top:14px;
-  background:linear-gradient(135deg,#1e40af,#3b82f6);
-  color:#fff!important;text-decoration:none;
-  font-size:13px;font-weight:700;padding:9px 22px;border-radius:10px;
-  box-shadow:0 4px 14px rgba(30,64,175,.30);
-}
-.badge-new{
-  display:inline-block;background:#dbeafe;color:#1e40af;
-  font-size:10px;font-weight:700;padding:2px 10px;border-radius:99px;
-  text-transform:uppercase;letter-spacing:.4px;
-}
-
-/* ── Form inputs ────────────────────────────────────────── */
-.stTextArea label,.stTextInput label{font-size:13px!important;font-weight:600!important;color:#374151!important;}
-.input-bar .stTextArea label{display:none!important;}
-.stSelectbox>div>div,
-.stTextInput>div>div>input,
-.stTextArea>div>div>textarea{
-  background:#fff!important;color:#0f172a!important;
-  border:1.5px solid rgba(30,64,175,.20)!important;
-  border-radius:10px!important;
-}
-[data-testid="stAlert"]{border-radius:12px!important;}
+  display:inline-flex;align-items:center;gap:5px;margin-top:12px;
+  background:linear-gradient(135deg,#1e40af,#3b82f6);color:#fff!important;
+  text-decoration:none;font-size:12px;font-weight:700;
+  padding:7px 18px;border-radius:10px;box-shadow:0 3px 12px rgba(30,64,175,.28);}
+.badge-new{display:inline-block;background:#dbeafe;color:#1e40af;
+  font-size:9px;font-weight:700;padding:2px 8px;border-radius:99px;
+  text-transform:uppercase;letter-spacing:.4px;}
 
 @keyframes fadeUp{from{opacity:0;transform:translateY(8px)}to{opacity:1;transform:translateY(0)}}
 .anim{animation:fadeUp .3s ease both;}
@@ -888,137 +863,84 @@ from jinja2 import Template as _JTmpl
 
 _CHAT_CSS = """
 <style>
-/* ── keyframes ─────────────────────────────────── */
-@keyframes msgBot {
-  from { opacity:0; transform:translateX(-22px) translateY(8px) scale(.97); }
-  to   { opacity:1; transform:none; }
+*{box-sizing:border-box;margin:0;padding:0;}
+html,body{background:#f8faff;font-family:-apple-system,BlinkMacSystemFont,'Segoe UI',sans-serif;}
+.msgs{
+  height:420px;overflow-y:auto;overflow-x:hidden;
+  padding:16px 14px 8px;
+  scrollbar-width:thin;scrollbar-color:#c7d2fe #f8faff;
+  background:#f8faff;
 }
-@keyframes msgUser {
-  from { opacity:0; transform:translateX(22px) translateY(8px) scale(.97); }
-  to   { opacity:1; transform:none; }
-}
-@keyframes avPop {
-  0%   { opacity:0; transform:scale(.4) rotate(-12deg); }
-  70%  { transform:scale(1.15) rotate(4deg); }
-  100% { opacity:1; transform:scale(1) rotate(0deg); }
-}
-@keyframes dotBounce {
-  0%,60%,100% { transform:translateY(0);   opacity:.35; }
-  30%         { transform:translateY(-7px); opacity:1;   }
-}
-@keyframes typingFade {
-  from { opacity:0; transform:translateX(-14px) translateY(6px); }
-  to   { opacity:1; transform:none; }
-}
-
-/* ── layout ─────────────────────────────────────── */
-.qchat{display:flex;flex-direction:column;gap:18px;padding:4px 0 130px;}
-.qrow{display:flex;align-items:flex-start;gap:10px;}
-.qrow.user{flex-direction:row-reverse;}
-
-/* ── avatars ─────────────────────────────────────── */
-.qav{width:36px;height:36px;border-radius:50%;display:flex;align-items:center;
-     justify-content:center;font-size:17px;flex-shrink:0;margin-top:3px;}
-.qav.assistant{background:linear-gradient(135deg,#2563eb,#0ea5e9);}
-.qav.user{background:linear-gradient(135deg,#7c3aed,#a855f7);}
-/* only the newest message avatar pops */
-.qrow.latest .qav{animation:avPop .35s cubic-bezier(.34,1.56,.64,1) both;}
-
-/* ── bubbles ─────────────────────────────────────── */
-.qbubble{max-width:82%;padding:14px 18px;font-size:14px;line-height:1.8;
-         word-break:break-word;}
-.qbubble.assistant{background:#fff;border:1px solid #e2e8f0;color:#1e293b;
-                   border-radius:4px 18px 18px 18px;
-                   box-shadow:0 2px 12px rgba(0,0,0,.07);}
-.qbubble.user{background:linear-gradient(135deg,#2563eb,#1d4ed8);color:#fff;
-              border-radius:18px 4px 18px 18px;
-              box-shadow:0 4px 14px rgba(37,99,235,.35);}
-/* only the newest bubble animates */
-.qrow.latest.assistant .qbubble{
-  animation:msgBot .42s cubic-bezier(.22,.68,0,1.15) both;}
-.qrow.latest.user .qbubble{
-  animation:msgUser .38s cubic-bezier(.22,.68,0,1.15) both;}
-
-/* ── bubble content ──────────────────────────────── */
-.qbubble p{margin:0 0 10px 0;}
-.qbubble p:last-child{margin-bottom:0;}
-.qbubble ol{margin:10px 0 10px 22px;padding:0;}
-.qbubble ul{margin:10px 0 10px 22px;padding:0;}
-.qbubble li{margin-bottom:8px;line-height:1.75;}
-.qbubble hr{border:none;border-top:1px solid #e2e8f0;margin:12px 0;}
-.qbubble strong{color:#1d4ed8;}
-.qbubble.user strong{color:#bfdbfe;}
-.qbubble code{background:#eff6ff;color:#2563eb;padding:2px 7px;
-              border-radius:5px;font-family:monospace;font-size:12.5px;}
-.qbubble.user code{background:rgba(255,255,255,.2);color:#e0f2fe;}
-.qbubble pre{background:#f8fafc;border:1px solid #e2e8f0;border-radius:8px;
-             padding:12px 14px;overflow-x:auto;margin:10px 0;}
-.qbubble pre code{background:none;color:#0f172a;padding:0;}
-.case-tag{display:inline-block;background:#eff6ff;color:#1d4ed8;font-size:12px;
-          font-weight:700;padding:3px 10px;border-radius:99px;margin-bottom:10px;
-          border:1px solid #bfdbfe;}
-
-/* ── visual step cards ───────────────────────────── */
-.vstep{background:#f8fafc;border:1px solid #e2e8f0;border-radius:10px;
-       padding:10px 14px;margin:8px 0;font-size:13px;}
+.msgs::-webkit-scrollbar{width:3px;}
+.msgs::-webkit-scrollbar-thumb{background:#c7d2fe;border-radius:3px;}
+.msgs::-webkit-scrollbar-track{background:transparent;}
+.row{display:flex;align-items:flex-end;gap:8px;margin-bottom:12px;}
+.row.u{flex-direction:row-reverse;}
+.av{width:30px;height:30px;border-radius:50%;flex-shrink:0;
+    display:flex;align-items:center;justify-content:center;font-size:14px;}
+.av.a{background:linear-gradient(135deg,#1e40af,#3b82f6);}
+.av.u{background:linear-gradient(135deg,#7c3aed,#a855f7);}
+@keyframes avIn{from{opacity:0;transform:scale(.5)}to{opacity:1;transform:scale(1)}}
+.row.new .av{animation:avIn .25s cubic-bezier(.34,1.56,.64,1) both;}
+.bub{max-width:80%;padding:10px 14px;font-size:13px;line-height:1.7;word-break:break-word;}
+.bub.a{background:#fff;border:1.5px solid #e0e7ff;color:#1e293b;
+       border-radius:4px 16px 16px 16px;box-shadow:0 1px 6px rgba(99,102,241,.08);}
+.bub.u{background:linear-gradient(135deg,#1e40af,#2563eb);color:#fff;
+       border-radius:16px 4px 16px 16px;box-shadow:0 2px 12px rgba(37,99,235,.28);}
+@keyframes botIn{from{opacity:0;transform:translateX(-16px) translateY(6px)}to{opacity:1;transform:none}}
+@keyframes usrIn{from{opacity:0;transform:translateX(16px) translateY(6px)}to{opacity:1;transform:none}}
+.row.new.a .bub{animation:botIn .35s cubic-bezier(.22,.68,0,1.12) both;}
+.row.new.u .bub{animation:usrIn .3s cubic-bezier(.22,.68,0,1.12) both;}
+.bub p{margin:0 0 6px;}.bub p:last-child{margin-bottom:0;}
+.bub ol,.bub ul{margin:6px 0 6px 18px;}.bub li{margin-bottom:5px;line-height:1.6;}
+.bub strong{color:#1d4ed8;}.bub.u strong{color:#bfdbfe;}
+.bub code{background:#eff6ff;color:#2563eb;padding:1px 6px;border-radius:4px;font-size:12px;font-family:monospace;}
+.bub.u code{background:rgba(255,255,255,.2);color:#e0f2fe;}
+.bub hr{border:none;border-top:1px solid #e0e7ff;margin:8px 0;}
+.vstep{background:#f1f5ff;border:1px solid #dbeafe;border-radius:10px;padding:9px 12px;margin:5px 0;font-size:12px;}
 .vstep-num{display:inline-flex;align-items:center;justify-content:center;
-           width:22px;height:22px;border-radius:50%;
-           background:linear-gradient(135deg,#2563eb,#0ea5e9);
-           color:#fff;font-size:11px;font-weight:700;margin-right:8px;flex-shrink:0;}
-.vstep-row{display:flex;align-items:flex-start;gap:4px;}
+  width:20px;height:20px;border-radius:50%;
+  background:linear-gradient(135deg,#1e40af,#3b82f6);
+  color:#fff;font-size:10px;font-weight:700;margin-right:7px;flex-shrink:0;}
+.vstep-row{display:flex;align-items:flex-start;}
 .vstep-body{flex:1;}
-.vstep-action{font-weight:600;color:#0f172a;margin-bottom:4px;}
-.vstep-why{font-size:12px;color:#64748b;margin-bottom:6px;}
-.vpath{display:flex;align-items:center;gap:4px;flex-wrap:wrap;
-       background:#1e293b;border-radius:6px;padding:7px 12px;margin-top:4px;}
-.vpath-seg{color:#94a3b8;font-family:monospace;font-size:12px;}
-.vpath-sep{color:#475569;margin:0 2px;}
+.vstep-action{font-weight:700;color:#0f172a;margin-bottom:2px;}
+.vstep-why{font-size:11px;color:#64748b;margin-bottom:4px;}
+.vpath{display:flex;align-items:center;flex-wrap:wrap;gap:3px;
+  background:#1e293b;border-radius:6px;padding:6px 10px;margin-top:3px;}
+.vpath-seg{color:#94a3b8;font-family:monospace;font-size:11px;}
+.vpath-sep{color:#475569;margin:0 1px;}
 .vpath-seg.file{color:#7dd3fc;font-weight:600;}
-.vcode{background:#1e293b;border-radius:6px;padding:8px 12px;margin-top:6px;
-       font-family:monospace;font-size:12px;color:#e2e8f0;white-space:pre-wrap;
-       border-left:3px solid #2563eb;}
-.vcode .ck{color:#7dd3fc;}
-.vcode .cv{color:#86efac;}
-.vservice{display:inline-flex;align-items:center;gap:6px;
-          background:#fff;border:1px solid #e2e8f0;border-radius:6px;
-          padding:5px 10px;margin-top:6px;font-size:12px;}
-.vservice-dot{width:8px;height:8px;border-radius:50%;background:#22c55e;}
-
-/* ── typing indicator ────────────────────────────── */
-.qtyping-row{display:flex;align-items:flex-start;gap:10px;
-             animation:typingFade .3s ease both;}
-.qtyping-av{width:36px;height:36px;border-radius:50%;flex-shrink:0;margin-top:3px;
-            background:linear-gradient(135deg,#2563eb,#0ea5e9);
-            display:flex;align-items:center;justify-content:center;font-size:17px;}
-.qtyping-bubble{background:#fff;border:1px solid #e2e8f0;
-                border-radius:4px 18px 18px 18px;
-                box-shadow:0 2px 12px rgba(0,0,0,.07);
-                padding:16px 20px;display:flex;gap:6px;align-items:center;}
-.qtyping-bubble span{width:8px;height:8px;border-radius:50%;background:#94a3b8;
-                     display:inline-block;
-                     animation:dotBounce 1.1s infinite ease-in-out;}
-.qtyping-bubble span:nth-child(2){animation-delay:.18s;}
-.qtyping-bubble span:nth-child(3){animation-delay:.36s;}
+.vcode{background:#1e293b;border-radius:6px;padding:7px 10px;margin-top:4px;
+  font-family:monospace;font-size:11px;color:#e2e8f0;white-space:pre-wrap;border-left:3px solid #3b82f6;}
+.vcode .ck{color:#7dd3fc;}.vcode .cv{color:#86efac;}
+@keyframes db{0%,60%,100%{transform:translateY(0);opacity:.3}30%{transform:translateY(-5px);opacity:1}}
+@keyframes tIn{from{opacity:0;transform:translateX(-10px)}to{opacity:1;transform:none}}
+.qtyping-row{display:flex;align-items:flex-end;gap:8px;margin-bottom:10px;animation:tIn .25s ease both;}
+.qtyping-av{width:30px;height:30px;border-radius:50%;background:linear-gradient(135deg,#1e40af,#3b82f6);
+  display:flex;align-items:center;justify-content:center;font-size:14px;flex-shrink:0;}
+.qtyping-bubble{background:#fff;border:1.5px solid #e0e7ff;border-radius:4px 16px 16px 16px;
+  box-shadow:0 1px 6px rgba(99,102,241,.08);padding:10px 14px;display:flex;gap:4px;align-items:center;}
+.qtyping-bubble span{width:6px;height:6px;border-radius:50%;background:#94a3b8;
+  display:inline-block;animation:db 1.1s infinite ease-in-out;}
+.qtyping-bubble span:nth-child(2){animation-delay:.15s;}
+.qtyping-bubble span:nth-child(3){animation-delay:.3s;}
 </style>
 """
 
 _CHAT_TMPL = _JTmpl("""
 {{ css | safe }}
-<div class="qchat" id="qchat-root">
-{% for msg in messages %}
-<div class="qrow {{ msg.role }}{% if loop.last %} latest{% endif %}">
-  <div class="qav {{ msg.role }}">{{ '\U0001f916' if msg.role == 'assistant' else '\U0001f464' }}</div>
-  <div class="qbubble {{ msg.role }}">{{ msg.html | safe }}</div>
+<div class="msgs" id="msgs">
+  <div id="chat">
+  {%- for msg in messages %}
+  <div class="row {{ 'a' if msg.role == 'assistant' else 'u' }}{% if loop.last %} new{% endif %}">
+    <div class="av {{ 'a' if msg.role == 'assistant' else 'u' }}">{{ '🤖' if msg.role == 'assistant' else '👤' }}</div>
+    <div class="bub {{ 'a' if msg.role == 'assistant' else 'u' }}">{{ msg.html | safe }}</div>
+  </div>
+  {%- endfor %}
+  </div>
 </div>
-{% endfor %}
-</div>
-<script>
-(function(){
-  var el = document.getElementById('qchat-root');
-  if(el){ el.lastElementChild.scrollIntoView({behavior:'smooth',block:'end'}); }
-  window.scrollTo({top:document.body.scrollHeight, behavior:'smooth'});
-})();
-</script>
+<script>var m=document.getElementById('msgs');if(m)m.scrollTop=m.scrollHeight;</script>
 """)
 
 _TYPING_HTML = """
@@ -1568,28 +1490,20 @@ def _resolve(query: str, original_text: str, history: list) -> str:
 # NAVBAR
 # ═══════════════════════════════════════════════════════════
 def render_navbar():
-    user = st.session_state.get("user")
-    usr  = f'<span style="color:#94a3b8;font-size:12px;">👤 {user["name"]}</span>' if user else ""
+    user     = st.session_state.get("user")
+    usr_pill = f'<span class="nav-user">👤 {user["name"]}</span>' if user else ""
     st.html(f"""
-<div style="background:linear-gradient(90deg,#0f172a 0%,#1e3a5f 60%,#1e40af 100%);
-     box-shadow:0 4px 24px rgba(30,64,175,.35);padding:0 24px;
-     display:flex;align-items:center;justify-content:space-between;
-     height:60px;border-radius:0 0 16px 16px;margin-bottom:4px;">
-  <div style="display:flex;align-items:center;gap:12px;">
-    <div style="width:36px;height:36px;border-radius:10px;flex-shrink:0;
-         background:linear-gradient(135deg,#2563eb,#0ea5e9);
-         display:flex;align-items:center;justify-content:center;
-         font-size:20px;font-weight:900;color:#fff;
-         box-shadow:0 2px 10px rgba(59,130,246,.45);">Q</div>
-    <div style="width:1px;height:28px;background:rgba(255,255,255,.18);margin:0 4px;"></div>
-    <span style="font-size:14px;font-weight:700;color:#e2e8f0;letter-spacing:.2px;">Worksoft Support Portal</span>
+<div class="nav">
+  <div class="nav-left">
+    <div class="nav-logo">🤖</div>
+    <div>
+      <div class="nav-title">Worksoft AI Support</div>
+      <div class="nav-sub">Qualesce · Groq AI · Salesforce</div>
+    </div>
   </div>
-  <div style="display:flex;align-items:center;gap:12px;">
-    {usr}
-    <span style="background:linear-gradient(135deg,#0ea5e9,#3b82f6);color:#fff;
-         font-size:11px;font-weight:700;padding:5px 14px;border-radius:99px;
-         letter-spacing:.5px;text-transform:uppercase;
-         box-shadow:0 2px 8px rgba(14,165,233,.4);">🤖 AI Agent</span>
+  <div class="nav-right">
+    {usr_pill}
+    <span class="nav-pill">● Online</span>
   </div>
 </div>""")
 
@@ -1598,17 +1512,49 @@ def render_navbar():
 # PAGE: CHAT
 # ═══════════════════════════════════════════════════════════
 def render_sidebar():
-    import github_sync
-    with st.sidebar:
-        st.markdown("### 🛠 Knowledge Base")
-        info = support_db.get_sync_info()
-        cnt  = info.get("case_count", 0)
-        last = info.get("last_sync", "Never")[:19].replace("T", " ") if info.get("last_sync") else "Never"
-        st.caption(f"📦 **{cnt}** cases loaded  ·  Last updated: {last}")
+    pass   # no Streamlit sidebar — controls are in the left column
 
-        st.markdown("---")
-        if st.button("🔄 Sync Salesforce", use_container_width=True):
-            with st.spinner("Syncing from Salesforce…"):
+
+def _render_left_panel(col):
+    import github_sync
+    info = support_db.get_sync_info()
+    cnt  = info.get("case_count", 0)
+    last = info.get("last_sync", "")[:16].replace("T", " ") if info.get("last_sync") else "Never"
+    user = st.session_state.get("user")
+    feats = "".join([
+        f'<div class="lp-feature"><span style="font-size:14px;">{i}</span>{l}</div>'
+        for i, l in [("🔍","Smart AI search"),("📎","File & screenshot"),
+                     ("🎫","Auto ticket"),("📧","Admin notify")]
+    ])
+    user_html = (
+        f'<div class="lp-user"><div class="lp-uname">👤 {user["name"]}</div>'
+        f'<div class="lp-uemail">{user["email"]}</div></div>' if user else ""
+    )
+
+    with col:
+        st.markdown(f"""
+<div class="lp">
+  <div class="lp-logo">
+    <div class="lp-av">🤖</div>
+    <div><div class="lp-t">Worksoft AI</div><div class="lp-s">Support · Qualesce</div></div>
+  </div>
+  <span class="lp-status"><span class="lp-dot"></span>Online &amp; Ready</span>
+  <div>
+    <div class="lp-sec-title">Knowledge Base</div>
+    <div class="lp-stat">
+      <div class="lp-num">{cnt}</div>
+      <div class="lp-numlbl">Cases · Last sync: {last}</div>
+    </div>
+  </div>
+  <div>
+    <div class="lp-sec-title">Capabilities</div>
+    {feats}
+  </div>
+  {user_html}
+</div>""", unsafe_allow_html=True)
+
+        if st.button("🔄 Sync Salesforce", use_container_width=True, type="primary"):
+            with st.spinner("Syncing…"):
                 ok, msg = sync_sf_knowledge()
             if ok:
                 _cached_case_subjects.clear()
@@ -1616,114 +1562,41 @@ def render_sidebar():
             st.success(msg) if ok else st.error(msg)
             st.rerun()
 
-        # ── GitHub DB sync ──────────────────────────────────
         if github_sync.is_configured():
-            st.markdown("---")
-            st.markdown("### ☁️ GitHub DB Sync")
-            info_gh = _cached_gh_info()
-            if info_gh:
-                st.caption(
-                    f"Remote: **{info_gh.get('size_kb', 0)} KB**"
-                    + (f"  ·  {info_gh.get('last_updated', '')}" if info_gh.get("last_updated") else "")
-                )
-            gc1, gc2 = st.columns(2)
-            with gc1:
-                if st.button("⬆️ Push DB", use_container_width=True):
-                    with st.spinner("Pushing to GitHub…"):
-                        ok, msg = github_sync.push_db()
-                    st.success(msg) if ok else st.error(msg)
-            with gc2:
-                if st.button("⬇️ Pull DB", use_container_width=True):
-                    with st.spinner("Pulling from GitHub…"):
-                        ok, msg = github_sync.pull_db()
-                    if ok:
-                        st.success(msg)
-                        st.rerun()
-                    else:
-                        st.error(msg)
+            if st.button("☁️ Sync to GitHub", use_container_width=True):
+                with st.spinner("Pushing…"):
+                    ok, msg = github_sync.push_db()
+                st.success(msg) if ok else st.error(msg)
 
 
 def render_chat():
     render_navbar()
-    render_sidebar()
 
-    user = st.session_state.get("user")
-    uname = f" · {user['name']}" if user else ""
+    user  = st.session_state.get("user")
 
-    # ── Sync bar ────────────────────────────────────────────
-    info  = support_db.get_sync_info()
-    cnt   = info.get("case_count", 0)
-    last  = info.get("last_sync", "")[:16].replace("T", " ") if info.get("last_sync") else "Never"
-    col_info, col_btn = st.columns([3, 1])
-    with col_info:
-        st.caption(f"📦 **{cnt}** Salesforce cases loaded · Last sync: {last}")
-    with col_btn:
-        if st.button("🔄 Sync Salesforce", use_container_width=True):
-            with st.spinner("Syncing…"):
-                ok, msg = sync_sf_knowledge()
-            st.success(msg) if ok else st.error(msg)
-            st.rerun()
+    # ── Two-column layout ───────────────────────────────────
+    left_col, right_col = st.columns([1, 2.6], gap="large")
+    _render_left_panel(left_col)
 
-    st.html(f"""
-<div style="background:#fff;border:1px solid #e2e8f0;border-radius:14px;
-     padding:10px 18px;margin-bottom:8px;display:flex;align-items:center;
-     justify-content:space-between;box-shadow:0 2px 8px rgba(0,0,0,.05);">
-  <div style="display:flex;align-items:center;gap:12px;">
-    <div style="width:40px;height:40px;border-radius:12px;background:linear-gradient(135deg,#2563eb,#0ea5e9);
-         display:flex;align-items:center;justify-content:center;font-size:20px;">🤖</div>
-    <div>
-      <div style="font-size:14px;font-weight:700;color:#0f172a;">Qualesce AI Support Agent{uname}</div>
-      <div style="font-size:11px;color:#64748b;margin-top:1px;">Salesforce Cases · Powered by Groq AI</div>
+    with right_col:
+      # ── Home / Identity form ──────────────────────────────
+      if not st.session_state.user:
+        st.markdown("""
+<div class="login-card anim">
+  <div class="login-banner">
+    <div class="login-icon">🤖</div>
+    <div class="login-title">Worksoft AI Support</div>
+    <div class="login-sub">Instant help for CTM, Certify &amp; Portal — powered by Groq AI</div>
+    <div class="login-chips">
+      <span class="chip chip-white">🔍 Smart AI Search</span>
+      <span class="chip chip-white">📎 Screenshots</span>
+      <span class="chip chip-white">🎫 Auto Ticket</span>
     </div>
   </div>
-  <div style="display:flex;align-items:center;gap:6px;">
-    <span style="width:8px;height:8px;border-radius:50%;background:#22c55e;display:inline-block;"></span>
-    <span style="font-size:11px;color:#22c55e;font-weight:600;">Online</span>
-  </div>
-</div>""")
-
-    # ── Home / Identity form ────────────────────────────────
-    if not st.session_state.user:
-        st.markdown("""
-<div style="text-align:center;padding:28px 0 20px;" class="anim">
-  <div style="font-size:52px;margin-bottom:12px;">🤖</div>
-  <div style="font-size:26px;font-weight:900;color:#0f172a;letter-spacing:-.5px;margin-bottom:6px;">
-    Worksoft AI Support Agent
-  </div>
-  <div style="font-size:14px;color:#64748b;max-width:400px;margin:0 auto;">
-    Get instant troubleshooting help for Worksoft Certify issues.<br>
-    Attach a screenshot and our AI will analyze it for you.
-  </div>
-</div>""", unsafe_allow_html=True)
-
-        st.markdown("""
-<div style="display:flex;justify-content:center;gap:10px;flex-wrap:wrap;margin-bottom:24px;">
-  <span style="background:#eff6ff;border:1.5px solid #bfdbfe;color:#1e40af;
-        font-size:12px;font-weight:700;padding:6px 14px;border-radius:99px;">
-    🔍 AI Analysis
-  </span>
-  <span style="background:#f0fdf4;border:1.5px solid #bbf7d0;color:#166534;
-        font-size:12px;font-weight:700;padding:6px 14px;border-radius:99px;">
-    📎 Screenshot Upload
-  </span>
-  <span style="background:#faf5ff;border:1.5px solid #e9d5ff;color:#7e22ce;
-        font-size:12px;font-weight:700;padding:6px 14px;border-radius:99px;">
-    🎫 Auto Ticket Raising
-  </span>
-</div>""", unsafe_allow_html=True)
-
-        st.markdown("""
-<div style="background:rgba(255,255,255,.90);backdrop-filter:blur(18px);
-     border:1.5px solid rgba(30,64,175,.14);border-radius:20px;
-     box-shadow:0 10px 36px rgba(30,64,175,.12);padding:28px 32px;
-     max-width:580px;margin:0 auto 8px;" class="anim">
-  <div style="font-size:15px;font-weight:800;color:#0f172a;margin-bottom:4px;">
-    👋 Let&#39;s get started
-  </div>
-  <div style="font-size:13px;color:#64748b;margin-bottom:20px;">
-    Fill in your details and describe your issue or upload a screenshot.
-  </div>
-</div>""", unsafe_allow_html=True)
+  <div class="login-body">
+  <div class="login-body-title">👋 Let's get started</div>
+  <div class="login-body-sub">Enter your details and describe your issue — or attach a screenshot.</div>
+""", unsafe_allow_html=True)
 
         st.markdown('<div class="home-upload">', unsafe_allow_html=True)
         home_file = st.file_uploader(
@@ -1748,15 +1621,16 @@ def render_chat():
 
             issue_desc = st.text_area(
                 "Describe your issue (optional)",
-                placeholder="e.g. Worksoft agent is not connecting after server restart…",
-                height=100,
+                placeholder="e.g. CTM agent not connecting after server restart…",
+                height=90,
             )
-            st.markdown("<div style='height:4px'></div>", unsafe_allow_html=True)
             go = st.form_submit_button(
-                "🚀  Start Chatting with AI Agent",
+                "🚀  Start Chat",
                 use_container_width=True,
                 type="primary",
             )
+
+        st.markdown('</div></div>', unsafe_allow_html=True)
 
         if go:
             if not name.strip() or not email.strip():
@@ -1765,18 +1639,15 @@ def render_chat():
                 st.session_state.user = {"name": name.strip(), "email": email.strip()}
                 sid = support_db.create_session(name.strip(), email.strip())
                 st.session_state.session_id = sid
-
                 first_content = issue_desc.strip() or ""
                 file_data = _process_upload(home_file) if home_file else None
-
                 welcome_reply = (
-                    f"Hi **{name.strip()}**! 👋 I'm your Worksoft Certify support agent.\n\n"
-                    "Describe your issue below — or attach a **screenshot, log file, or PDF** "
-                    "using the 📎 icon and I'll analyze it for you."
+                    f"Hi **{name.strip()}**! 👋 I'm your Worksoft AI support agent.\n\n"
+                    "Describe your issue — or attach a **screenshot, log file, or PDF** "
+                    "using the 📎 icon and I'll analyze it."
                 )
                 st.session_state.messages.append({"role": "assistant", "content": welcome_reply})
                 support_db.save_message(sid, "assistant", welcome_reply)
-
                 if first_content or file_data:
                     user_msg = {"role": "user", "content": first_content}
                     fname = home_file.name if home_file else ""
@@ -1787,7 +1658,6 @@ def render_chat():
                         st.session_state.issue_text = first_content or f"[Screenshot: {fname}]"
                     st.session_state.messages.append(user_msg)
                     support_db.save_message(sid, "user", first_content, fname, ftype)
-
                     _typing_slot = st.empty()
                     _typing_slot.html(_TYPING_HTML)
                     reply = groq_chat(first_content, st.session_state.messages, file_data)
@@ -1795,47 +1665,55 @@ def render_chat():
                     st.session_state.messages.append({"role": "assistant", "content": reply})
                     support_db.save_message(sid, "assistant", reply)
                     st.session_state.fu_key += 1
-
                 st.rerun()
         return
 
-    _live_chat()
+      _live_chat()
 
 
 @st.fragment
 def _live_chat():
     """
-    Fragment: only this section reruns when a message is sent.
-    Navbar and sidebar stay frozen — no full-page blink.
+    Fragment: only the chat panel reruns on each message — sidebar/navbar stay frozen.
     """
-    # ── Render messages ──────────────────────────────────────
+    user  = st.session_state.get("user")
+    uname = user["name"] if user else ""
+
+    # ── Chat window header ───────────────────────────────────
+    st.html(f"""
+<div class="cwin">
+  <div class="chead">
+    <div class="chead-left">
+      <div class="chead-av">🤖</div>
+      <div>
+        <div class="chead-name">Qualesce AI Support{(" — " + uname) if uname else ""}</div>
+        <div class="chead-sub">CTM · Certify · Portal · Capture</div>
+        <span class="chead-status"><span class="chead-dot"></span>Online</span>
+      </div>
+    </div>
+    <div class="chead-rt">
+      <div class="chead-rt-lbl">Response</div>
+      <div class="chead-rt-val">~2-5 sec</div>
+    </div>
+  </div>
+</div>""")
+
+    # ── Messages (scrollable) ────────────────────────────────
     if st.session_state.messages:
         st.html(_render_messages_html(st.session_state.messages))
+
+    # Inline images from file uploads
     for msg in st.session_state.messages:
         fdata = msg.get("file")
         if fdata and fdata["type"] == "image":
             st.image(
                 f"data:{fdata['mime']};base64,{fdata['base64']}",
-                caption=fdata["name"], width=300
+                caption=fdata["name"], width=260,
             )
 
-    # ── Resolution strip ────────────────────────────────────
-    msgs = st.session_state.messages
-    if msgs and msgs[-1]["role"] == "assistant" and len(msgs) >= 2:
-        st.markdown('<div class="res-row">', unsafe_allow_html=True)
-        st.markdown('<span class="res-label">Was this helpful?</span>', unsafe_allow_html=True)
-        st.markdown('</div>', unsafe_allow_html=True)
-        rc1, rc2, _ = st.columns([1.2, 1.4, 4])
-        with rc1:
-            if st.button("✅ Yes, resolved!", use_container_width=True, type="primary"):
-                st.session_state.page = "resolved"
-                st.rerun(scope="app")          # full rerun needed for page navigation
-        with rc2:
-            if st.button("❌ Still need help", use_container_width=True):
-                st.session_state.page = "escalated"
-                st.rerun(scope="app")
-
     # ── Input bar ────────────────────────────────────────────
+    st.markdown('<div class="input-bar">', unsafe_allow_html=True)
+    st.markdown('<div class="input-box">', unsafe_allow_html=True)
     with st.form("chat_form", clear_on_submit=True):
         att_col, txt_col, snd_col = st.columns([1, 9, 1])
         with att_col:
@@ -1853,7 +1731,29 @@ def _live_chat():
             )
         with snd_col:
             send = st.form_submit_button("➤", use_container_width=True, type="primary")
+    st.markdown('</div>', unsafe_allow_html=True)  # input-box
+    st.markdown('</div>', unsafe_allow_html=True)  # input-bar
 
+    # ── Action buttons ───────────────────────────────────────
+    msgs = st.session_state.messages
+    if msgs and msgs[-1]["role"] == "assistant" and len(msgs) >= 2:
+        st.markdown(
+            '<div style="display:flex;align-items:center;gap:8px;padding:6px 0 2px;">'
+            '<span style="font-size:12px;color:#64748b;font-weight:600;margin-right:4px;">Was this helpful?</span>'
+            '</div>',
+            unsafe_allow_html=True,
+        )
+        rc1, rc2, _ = st.columns([1.3, 1.5, 4])
+        with rc1:
+            if st.button("✅ Yes, resolved!", use_container_width=True, type="primary"):
+                st.session_state.page = "resolved"
+                st.rerun(scope="app")
+        with rc2:
+            if st.button("❌ Still need help", use_container_width=True):
+                st.session_state.page = "escalated"
+                st.rerun(scope="app")
+
+    # ── Handle send ──────────────────────────────────────────
     if send and (user_input.strip() or uploaded):
         file_data = _process_upload(uploaded) if uploaded else None
         user_msg  = {"role": "user", "content": user_input.strip()}
@@ -1877,19 +1777,7 @@ def _live_chat():
         st.session_state.messages.append({"role": "assistant", "content": reply})
         if sid:
             support_db.save_message(sid, "assistant", reply)
-        st.rerun()                              # fragment-only rerun — no blink
-
-    # ── New Chat ─────────────────────────────────────────────
-    st.markdown("<div style='height:6px'></div>", unsafe_allow_html=True)
-    _, nc, _ = st.columns([4, 1.5, 4])
-    with nc:
-        if st.button("🔄 New Chat", use_container_width=True):
-            for k in ["messages","issue_text","sf_ticket","user","pending_file"]:
-                st.session_state[k] = [] if k=="messages" else ("" if k=="issue_text" else None)
-            _reset_chat_state()
-            st.session_state.fu_key += 1
-            st.session_state.page = "chat"
-            st.rerun(scope="app")
+        st.rerun()
 
 
 # ═══════════════════════════════════════════════════════════

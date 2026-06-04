@@ -1554,19 +1554,17 @@ def _render_left_panel(col):
 </div>""", unsafe_allow_html=True)
 
         if st.button("🔄 Sync Salesforce", use_container_width=True, type="primary"):
-            with st.spinner("Syncing…"):
+            with st.spinner("Syncing Salesforce…"):
                 ok, msg = sync_sf_knowledge()
             if ok:
                 _cached_case_subjects.clear()
                 _cached_gh_info.clear()
+                if github_sync.is_configured():
+                    with st.spinner("Pushing to GitHub…"):
+                        gh_ok, gh_msg = github_sync.push_db()
+                    msg += f"\n{'☁️ ' + gh_msg if gh_ok else '⚠️ GitHub: ' + gh_msg}"
             st.success(msg) if ok else st.error(msg)
             st.rerun()
-
-        if github_sync.is_configured():
-            if st.button("☁️ Sync to GitHub", use_container_width=True):
-                with st.spinner("Pushing…"):
-                    ok, msg = github_sync.push_db()
-                st.success(msg) if ok else st.error(msg)
 
 
 def render_chat():

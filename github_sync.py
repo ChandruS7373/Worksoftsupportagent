@@ -36,7 +36,7 @@ def _local_db_path():
     """Return the local DB path (same logic as support_db)."""
     return os.environ.get(
         "SUPPORT_DB_PATH",
-        r"C:\Users\ChandruS\Downloads\Worksoft Support Agent\worksoft_support.db",
+        os.path.join(os.path.dirname(os.path.abspath(__file__)), "worksoft_support.db"),
     )
 
 

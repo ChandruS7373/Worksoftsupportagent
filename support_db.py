@@ -9,7 +9,7 @@ from datetime import datetime
 
 DB_PATH = os.environ.get(
     "SUPPORT_DB_PATH",
-    r"C:\Users\ChandruS\Downloads\Worksoft Support Agent\worksoft_support.db"
+    os.path.join(os.path.dirname(os.path.abspath(__file__)), "worksoft_support.db")
 )
 
 

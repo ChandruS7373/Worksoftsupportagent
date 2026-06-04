@@ -506,10 +506,9 @@ def sync_sf_knowledge() -> tuple[bool, str]:
     try:
         sf = _sf_client()
 
-        conn = support_db.get_conn()
-        conn.execute("DELETE FROM sf_knowledge")
-        conn.commit()
-        conn.close()
+        # No upfront DELETE — upsert_sf_case() uses ON CONFLICT DO UPDATE and
+        # delete_removed_cases() removes stale entries at the end.
+        # Deleting first would push an empty DB to GitHub before inserts complete.
 
         # Try progressively simpler queries until one succeeds.
         # Using a CaseComments subquery fetches all comments in one API call

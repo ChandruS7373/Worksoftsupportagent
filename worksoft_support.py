@@ -337,9 +337,9 @@ def _init_state():
         if k not in st.session_state:
             st.session_state[k] = v
 
-support_db.init_db()
-github_sync.ensure_db_downloaded()   # pull DB from GitHub if missing (Streamlit Cloud restarts)
+github_sync.ensure_db_downloaded()   # MUST be before init_db — downloads synced DB from GitHub before creating empty one
 github_sync.start_sync_thread()       # auto-push DB to GitHub every 30s when it changes
+support_db.init_db()                  # creates tables if they don't exist (no-op if DB already has data)
 _init_state()
 
 

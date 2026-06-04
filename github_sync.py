@@ -136,12 +136,11 @@ def _sync_loop():
 
 
 def ensure_db_downloaded():
-    """Call once at app startup — downloads DB from GitHub if local file is missing."""
+    """Call once at app startup — always fetches DB from GitHub on first process run."""
     global _db_downloaded
     if not _db_downloaded:
         _db_downloaded = True
-        if not os.path.exists(_DB_PATH):
-            download_db()
+        download_db()  # always fetch; if repo has no DB yet, download_db() is a safe no-op
 
 
 def start_sync_thread():

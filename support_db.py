@@ -225,6 +225,12 @@ def update_sync_log(case_count: int):
         (now, case_count),
     )
     conn.commit(); conn.close()
+    # Trigger immediate GitHub push after every sync
+    try:
+        import github_sync
+        github_sync.push_now()
+    except Exception:
+        pass
 
 
 def get_sync_info() -> dict:

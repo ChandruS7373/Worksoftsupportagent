@@ -698,8 +698,31 @@ def sync_sf_knowledge() -> tuple[bool, str]:
 # ═══════════════════════════════════════════════════════════
 # AI HELPERS
 # ═══════════════════════════════════════════════════════════
-_GROQ_MODELS   = ["deepseek-r1-distill-llama-70b", "llama-3.3-70b-versatile", "llama-3.1-8b-instant"]
-_VISION_MODELS = ["llama-3.2-11b-vision-preview", "llama-3.2-90b-vision-preview"]
+_GROQ_MODELS      = ["llama-3.3-70b-versatile", "llama-3.1-8b-instant"]
+_GROQ_FAST_MODELS = ["llama-3.1-8b-instant"]          # for cheap one-liners
+_VISION_MODELS    = ["llama-3.2-11b-vision-preview", "llama-3.2-90b-vision-preview"]
+
+
+@st.cache_data(ttl=45, show_spinner=False)
+def _cached_case_subjects():
+    """Case subjects list — cached 45 s so repeated chat turns skip the DB query."""
+    return support_db.get_all_case_subjects()
+
+
+@st.cache_data(ttl=45, show_spinner=False)
+def _cached_case_pool():
+    """Case pool with snippets — cached 45 s."""
+    return support_db.get_case_pool(limit=150)
+
+
+@st.cache_data(ttl=90, show_spinner=False)
+def _cached_gh_info():
+    """GitHub remote DB info — cached 90 s to avoid 2 HTTP calls on every render."""
+    try:
+        import github_sync as _gs
+        return _gs.remote_info() if _gs.is_configured() else {}
+    except Exception:
+        return {}
 
 _EXPERT_PERSONA = (
     "You are a smart, warm Worksoft support expert at Qualesce. "
@@ -719,23 +742,33 @@ _GREETINGS   = _GREET_WORDS | {
 }
 
 
+@st.cache_resource(show_spinner=False)
+def _groq_client():
+    from groq import Groq
+    return Groq(api_key=GROQ_API_KEY)
+
+
 def _ask_groq(system_prompt: str, user_prompt: str, max_tokens: int = 800,
-              history: list = None) -> str:
+              history: list = None, fast: bool = False) -> str:
+    """
+    fast=True  → uses llama-3.1-8b-instant (cheap tasks: clarifying Q, greeting, wrap-up)
+    fast=False → uses llama-3.3-70b-versatile then falls back to 8b (answer generation)
+    history    → last 4 turns included as context (trimmed to 400 chars each)
+    """
     if not GROQ_API_KEY:
         return ""
     try:
-        from groq import Groq
-        client = Groq(api_key=GROQ_API_KEY)
-        # Build messages with conversation history for context
+        client = _groq_client()
         messages = [{"role": "system", "content": system_prompt}]
         if history:
-            for msg in history[-6:]:
+            for msg in history[-4:]:          # 4 turns is enough context
                 role    = msg.get("role", "")
                 content = msg.get("content", "")
                 if role in ("user", "assistant") and content:
-                    messages.append({"role": role, "content": str(content)[:600]})
+                    messages.append({"role": role, "content": str(content)[:400]})
         messages.append({"role": "user", "content": user_prompt})
-        for model in _GROQ_MODELS:
+        models = _GROQ_FAST_MODELS if fast else _GROQ_MODELS
+        for model in models:
             try:
                 r = client.chat.completions.create(
                     model=model,
@@ -744,7 +777,6 @@ def _ask_groq(system_prompt: str, user_prompt: str, max_tokens: int = 800,
                     temperature=0.3,
                 )
                 reply = r.choices[0].message.content or ""
-                # deepseek-r1 wraps chain-of-thought in <think>...</think> — strip it
                 reply = re.sub(r"<think>.*?</think>", "", reply, flags=re.DOTALL).strip()
                 if reply:
                     return reply
@@ -926,6 +958,32 @@ _CHAT_CSS = """
           font-weight:700;padding:3px 10px;border-radius:99px;margin-bottom:10px;
           border:1px solid #bfdbfe;}
 
+/* ── visual step cards ───────────────────────────── */
+.vstep{background:#f8fafc;border:1px solid #e2e8f0;border-radius:10px;
+       padding:10px 14px;margin:8px 0;font-size:13px;}
+.vstep-num{display:inline-flex;align-items:center;justify-content:center;
+           width:22px;height:22px;border-radius:50%;
+           background:linear-gradient(135deg,#2563eb,#0ea5e9);
+           color:#fff;font-size:11px;font-weight:700;margin-right:8px;flex-shrink:0;}
+.vstep-row{display:flex;align-items:flex-start;gap:4px;}
+.vstep-body{flex:1;}
+.vstep-action{font-weight:600;color:#0f172a;margin-bottom:4px;}
+.vstep-why{font-size:12px;color:#64748b;margin-bottom:6px;}
+.vpath{display:flex;align-items:center;gap:4px;flex-wrap:wrap;
+       background:#1e293b;border-radius:6px;padding:7px 12px;margin-top:4px;}
+.vpath-seg{color:#94a3b8;font-family:monospace;font-size:12px;}
+.vpath-sep{color:#475569;margin:0 2px;}
+.vpath-seg.file{color:#7dd3fc;font-weight:600;}
+.vcode{background:#1e293b;border-radius:6px;padding:8px 12px;margin-top:6px;
+       font-family:monospace;font-size:12px;color:#e2e8f0;white-space:pre-wrap;
+       border-left:3px solid #2563eb;}
+.vcode .ck{color:#7dd3fc;}
+.vcode .cv{color:#86efac;}
+.vservice{display:inline-flex;align-items:center;gap:6px;
+          background:#fff;border:1px solid #e2e8f0;border-radius:6px;
+          padding:5px 10px;margin-top:6px;font-size:12px;}
+.vservice-dot{width:8px;height:8px;border-radius:50%;background:#22c55e;}
+
 /* ── typing indicator ────────────────────────────── */
 .qtyping-row{display:flex;align-items:flex-start;gap:10px;
              animation:typingFade .3s ease both;}
@@ -1032,13 +1090,149 @@ def _md_to_html(text: str) -> str:
     return '\n'.join(out)
 
 
+def _path_to_html(path: str) -> str:
+    """Render a file path as a dark terminal-style breadcrumb visual."""
+    import html as _h
+    parts = re.split(r'[\\/]+', path.strip().strip('\\/'))
+    segs  = []
+    for i, p in enumerate(parts):
+        if not p:
+            continue
+        cls = "file" if (i == len(parts) - 1 and '.' in p) else ""
+        segs.append(f'<span class="vpath-seg {cls}">{_h.escape(p)}</span>')
+        if i < len(parts) - 1:
+            segs.append('<span class="vpath-sep">›</span>')
+    return f'<div class="vpath">📁 {"".join(segs)}</div>'
+
+
+def _config_to_html(lines: list[str]) -> str:
+    """Render key=value or XML config lines as a highlighted code block."""
+    import html as _h
+    out = []
+    for line in lines:
+        # XML attribute style: key="value" or key='value'
+        m = re.match(r'\s*<add\s+key=["\']([^"\']+)["\']\s+value=["\']([^"\']*)["\']', line)
+        if m:
+            out.append(
+                f'  &lt;add key=<span class="ck">"{_h.escape(m.group(1))}"</span> '
+                f'value=<span class="cv">"{_h.escape(m.group(2))}"</span> /&gt;'
+            )
+            continue
+        # plain key=value or key: value
+        m2 = re.match(r'\s*([^=:]+)[=:]\s*(.+)', line)
+        if m2:
+            out.append(
+                f'<span class="ck">{_h.escape(m2.group(1).strip())}</span>'
+                f' = <span class="cv">{_h.escape(m2.group(2).strip())}</span>'
+            )
+            continue
+        out.append(_h.escape(line))
+    return f'<div class="vcode">{"<br>".join(out)}</div>'
+
+
+def _enrich_step_html(step_text: str) -> str:
+    """
+    Given one step's text (already HTML-escaped by _md_to_html),
+    detect file paths and config snippets and render them as visual cards.
+    """
+    import html as _h
+
+    # Find Windows file paths  e.g.  C:\Program Files (x86)\Worksoft\...
+    path_pattern = re.compile(
+        r'([A-Za-z]:\\(?:[^\s<>"\']+\\)*[^\s<>"\'.]*(?:\.[a-zA-Z0-9]+)?)',
+    )
+    # Find config lines (XML add-key or key=value blocks in backtick or plain)
+    config_pattern = re.compile(
+        r'`([^`]{5,})`|(&lt;add\s+key=["\'][^&]+)',
+    )
+
+    extras = []
+
+    # Extract all paths and replace inline with just filename highlighted
+    paths_found = []
+    def _replace_path(m):
+        raw = m.group(1)
+        paths_found.append(raw)
+        fname = raw.split('\\')[-1]
+        return f'<code>{_h.escape(fname)}</code>'
+
+    enriched = path_pattern.sub(_replace_path, step_text)
+
+    for p in paths_found:
+        extras.append(_path_to_html(p))
+
+    # Extract config key-value pairs from backtick code spans already in HTML
+    cfg_lines = []
+    for m in config_pattern.finditer(step_text):
+        raw = _h.unescape(m.group(0)).strip('`')
+        cfg_lines.append(raw)
+    if cfg_lines:
+        extras.append(_config_to_html(cfg_lines))
+        # Remove the backtick spans from enriched text (already captured above)
+        enriched = re.sub(r'<code>[^<]{3,}</code>', '', enriched)
+
+    return enriched + ''.join(extras)
+
+
+def _assistant_to_html(text: str) -> str:
+    """
+    Full pipeline for assistant messages:
+    1. Parse numbered steps
+    2. Render each step as a visual card with path/config visuals
+    3. Render non-step text normally via _md_to_html
+    """
+    import html as _h
+
+    lines      = text.split('\n')
+    out        = []
+    in_steps   = False
+    step_buf   = []
+
+    def _flush_steps():
+        nonlocal in_steps
+        if not step_buf:
+            return
+        for num, body in step_buf:
+            # Split action from reason (after em-dash or '—')
+            parts  = re.split(r'\s*[—–-]{1,2}\s*', body, maxsplit=1)
+            action = _md_to_html(parts[0].strip())
+            why    = _md_to_html(parts[1].strip()) if len(parts) > 1 else ""
+            enriched_action = _enrich_step_html(action)
+            enriched_why    = _enrich_step_html(why) if why else ""
+            out.append(
+                f'<div class="vstep">'
+                f'<div class="vstep-row">'
+                f'<span class="vstep-num">{num}</span>'
+                f'<div class="vstep-body">'
+                f'<div class="vstep-action">{enriched_action}</div>'
+                + (f'<div class="vstep-why">{enriched_why}</div>' if enriched_why else '')
+                + '</div></div></div>'
+            )
+        step_buf.clear()
+        in_steps = False
+
+    for line in lines:
+        ol_m = re.match(r'^(\d+)[\.\)]\s+(.*)', line.strip())
+        if ol_m:
+            in_steps = True
+            step_buf.append((ol_m.group(1), ol_m.group(2)))
+        else:
+            if in_steps:
+                _flush_steps()
+            if line.strip():
+                out.append(_md_to_html(line))
+
+    _flush_steps()
+    return '\n'.join(out)
+
+
 def _render_messages_html(messages: list) -> str:
     import html as _h
     prepared = []
     for msg in messages:
         content = msg.get("content", "")
         if msg["role"] == "assistant":
-            html_body = _md_to_html(content)
+            html_body = _assistant_to_html(content)
         else:
             html_body = f'<p>{_h.escape(content)}</p>'
         prepared.append({"role": msg["role"], "html": html_body})
@@ -1062,15 +1256,11 @@ def _parse_steps(content: str) -> list:
 
 def _retrieve_best_cases(query: str, top_n: int = 1) -> list:
     """
-    Two-stage retrieval — much more accurate than single-pass keyword/snippet matching.
-
-    Stage 1 (broad): ALL case subjects sent to Groq → up to 12 candidates selected
-                     semantically + keyword-matched cases merged in.
-    Stage 2 (precise): Full content of candidates sent to Groq → best 1-2 cases chosen
-                       based on actual content, not just subject.
+    Two-stage retrieval:
+    Stage 1 — ALL case subjects sent to AI → up to 12 candidates (semantic) + keyword hits merged.
+    Stage 2 — Full content of candidates sent to AI → best 1-2 chosen by actual content.
     """
-    # ── Stage 1: broad candidate selection on subjects ─────────
-    all_subs = support_db.get_all_case_subjects()
+    all_subs = _cached_case_subjects()
     if not all_subs:
         return []
 
@@ -1105,7 +1295,6 @@ def _retrieve_best_cases(query: str, top_n: int = 1) -> list:
                 if cid not in candidate_ids:
                     candidate_ids.append(cid)
 
-    # Merge keyword-matched cases so neither method alone can miss the answer
     kw_hits = support_db.search_knowledge(query, top_n=5)
     for m in kw_hits:
         cid = m["sf_case_id"]
@@ -1115,7 +1304,6 @@ def _retrieve_best_cases(query: str, top_n: int = 1) -> list:
     if not candidate_ids:
         return []
 
-    # ── Stage 2: content-level precise re-ranking ──────────────
     candidates = support_db.get_cases_by_ids(candidate_ids[:15])
     if not candidates:
         return []
@@ -1159,7 +1347,6 @@ def _retrieve_best_cases(query: str, top_n: int = 1) -> list:
         if final_ids:
             return [c for c in candidates if c["sf_case_id"] in final_ids][:top_n]
 
-    # Stage 2 said NONE or failed — fall back to stage 1 candidates with content
     with_content = [
         c for c in candidates
         if (c.get("comments") or c.get("description") or "").strip()
@@ -1193,6 +1380,7 @@ def groq_chat(text: str, history: list, file_data: dict = None) -> str:
             user_prompt=f"User said: '{text}'",
             history=history,
             max_tokens=100,
+            fast=True,
         ) or f"Hey {user_name}! I'm your Worksoft support buddy. What's going on today?"
 
     # ── RESOLVING PHASE — follow-ups from case context ────────
@@ -1212,16 +1400,18 @@ def groq_chat(text: str, history: list, file_data: dict = None) -> str:
                 user_prompt=text,
                 history=history,
                 max_tokens=80,
+                fast=True,
             ) or "Glad that sorted it! Go ahead and hit **✅ Yes, resolved!** below."
 
         case_ctx = st.session_state.get("sf_case_context", "")
         return _ask_groq(
             system_prompt=(
                 f"{_EXPERT_PERSONA}\n\n"
-                "The user already got the resolution steps and is asking a follow-up. "
-                "Answer naturally and conversationally — clarify a specific step, reassure them, "
-                "or help them diagnose if something didn't work. "
-                "Keep it concise. Don't repeat all the steps unless they explicitly ask.\n\n"
+                "The user got the resolution and is asking a follow-up. "
+                "Respond like a colleague sitting next to them — conversational, helpful, human. "
+                "You can draw on your own Worksoft knowledge to explain further, "
+                "suggest what to check next, or troubleshoot if a step didn't work. "
+                "Keep it short and natural.\n\n"
                 + (f"Issue context: {case_ctx}\n" if case_ctx else "")
                 + f"Resolution reference:\n{sf_resolution[:1500]}"
             ),
@@ -1268,6 +1458,7 @@ def groq_chat(text: str, history: list, file_data: dict = None) -> str:
         user_prompt=f"User's issue: {text}",
         history=history,
         max_tokens=100,
+        fast=True,
     )
 
     return clarifying_q or "Got it! Just to point you to the right fix — which Worksoft module is this in: CTM, Certify, or Portal?"
@@ -1278,21 +1469,36 @@ def _resolve(query: str, original_text: str, history: list) -> str:
     matches = _retrieve_best_cases(query, top_n=1)
 
     if not matches:
-        return _ask_groq(
+        # ── General AI fallback ───────────────────────────────
+        # No Salesforce case matched — use Groq's own Worksoft training knowledge
+        # to still try to help before suggesting a ticket.
+        general_reply = _ask_groq(
             system_prompt=(
                 f"{_EXPERT_PERSONA}\n\n"
-                "No matching case was found in our knowledge base. "
-                "Respond like a helpful colleague — briefly acknowledge the issue, "
-                "suggest sharing a screenshot or the exact error message, "
-                "and mention they can hit '❌ Still need help' to raise a ticket. "
-                "2-3 sentences max."
+                "No specific resolved case was found in our internal knowledge base.\n\n"
+                "Use your general Worksoft knowledge (CTM, Certify, Portal, Capture, "
+                "agent machines, IIS, appsettings, services) to help.\n\n"
+                "Response structure:\n"
+                "- 1 line: briefly say this is from general knowledge, not a specific resolved case\n"
+                "- **Numbered steps** — each on its own line with a brief reason:\n"
+                "  1. **Action** — why this helps\n"
+                "  2. **Action** — why this helps\n"
+                "- End with: '📸 Share a screenshot of the error if it persists — "
+                "or hit **❌ Still need help** to raise a ticket.'\n\n"
+                "If you genuinely don't know, skip the steps and go straight to the ticket suggestion."
             ),
             user_prompt=f"User's issue: {query}",
             history=history,
-            max_tokens=150,
-        ) or (
-            "I couldn't find an exact match for that — could you share a screenshot or "
-            "the exact error message? You can also hit **❌ Still need help** to raise a ticket."
+            max_tokens=500,
+        )
+        if general_reply:
+            # Store as resolution context so follow-up questions work
+            st.session_state.sf_resolution   = general_reply
+            st.session_state.sf_case_context  = query
+            st.session_state.chat_phase        = "resolving"
+        return general_reply or (
+            "I couldn't find a match in our knowledge base and don't have enough info to help directly. "
+            "Hit **❌ Still need help** to raise a ticket and the team will dig in."
         )
 
     best     = matches[0]
@@ -1327,16 +1533,23 @@ def _resolve(query: str, original_text: str, history: list) -> str:
     reply = _ask_groq(
         system_prompt=(
             f"{_EXPERT_PERSONA}\n\n"
-            "You found the fix for the user's issue. Present it conversationally:\n"
-            "1. One sentence acknowledging their specific problem (empathetic, natural).\n"
-            "2. Transition naturally — 'Here's what fixes this:' or 'This usually happens because...'\n"
-            "3. The resolution steps clearly. Keep numbered steps numbered.\n"
-            "4. Close with a friendly invite — 'Let me know if any step needs clarification!'\n\n"
+            "You have a resolved case that matches the user's issue. "
+            "Understand it and present the fix in a clean structured format.\n\n"
+            "Response structure:\n"
+            "**1 line** — What's causing this (the 'why'), short and clear.\n"
+            "**Numbered steps** — Each step on its own line. Format:\n"
+            "  1. **Action** — brief reason why this step matters\n"
+            "  2. **Action** — brief reason\n"
+            "  (keep technical details exact: file paths, config keys, values)\n"
+            "**Screenshot note** — End with ONE of these based on the issue:\n"
+            "  - If a screenshot from the user would help diagnose further: "
+            "'📸 If this doesn't resolve it, share a screenshot of the error and I can dig deeper.'\n"
+            "  - If the steps are self-sufficient: "
+            "'Give that a try and let me know how it goes!'\n\n"
             "Rules:\n"
-            "- Use ONLY the steps from the case content — never invent steps.\n"
-            "- Keep all technical details exact (file paths, config keys, values).\n"
-            "- Don't mention 'Salesforce', 'case number', or that you searched a database.\n"
-            "- Sound like a knowledgeable colleague, not a support bot.\n\n"
+            "- Never invent steps not in the case — but you can add brief 'why' context to each\n"
+            "- No walls of text — keep each step tight and scannable\n"
+            "- Don't mention Salesforce or case numbers\n\n"
             f"Case content:\n{content[:2000]}"
         ),
         user_prompt=f"User's issue: {query}",
@@ -1397,6 +1610,9 @@ def render_sidebar():
         if st.button("🔄 Sync Salesforce", use_container_width=True):
             with st.spinner("Syncing from Salesforce…"):
                 ok, msg = sync_sf_knowledge()
+            if ok:
+                _cached_case_subjects.clear()
+                _cached_gh_info.clear()
             st.success(msg) if ok else st.error(msg)
             st.rerun()
 
@@ -1404,7 +1620,7 @@ def render_sidebar():
         if github_sync.is_configured():
             st.markdown("---")
             st.markdown("### ☁️ GitHub DB Sync")
-            info_gh = github_sync.remote_info()
+            info_gh = _cached_gh_info()
             if info_gh:
                 st.caption(
                     f"Remote: **{info_gh.get('size_kb', 0)} KB**"
@@ -1583,10 +1799,18 @@ def render_chat():
                 st.rerun()
         return
 
-    # ── Render messages via Jinja ────────────────────────────
+    _live_chat()
+
+
+@st.fragment
+def _live_chat():
+    """
+    Fragment: only this section reruns when a message is sent.
+    Navbar and sidebar stay frozen — no full-page blink.
+    """
+    # ── Render messages ──────────────────────────────────────
     if st.session_state.messages:
         st.html(_render_messages_html(st.session_state.messages))
-    # Render any attached images separately (st.html cannot embed base64 images)
     for msg in st.session_state.messages:
         fdata = msg.get("file")
         if fdata and fdata["type"] == "image":
@@ -1604,12 +1828,14 @@ def render_chat():
         rc1, rc2, _ = st.columns([1.2, 1.4, 4])
         with rc1:
             if st.button("✅ Yes, resolved!", use_container_width=True, type="primary"):
-                st.session_state.page = "resolved"; st.rerun()
+                st.session_state.page = "resolved"
+                st.rerun(scope="app")          # full rerun needed for page navigation
         with rc2:
             if st.button("❌ Still need help", use_container_width=True):
-                st.session_state.page = "escalated"; st.rerun()
+                st.session_state.page = "escalated"
+                st.rerun(scope="app")
 
-    # ── Fixed input bar ─────────────────────────────────────
+    # ── Input bar ────────────────────────────────────────────
     with st.form("chat_form", clear_on_submit=True):
         att_col, txt_col, snd_col = st.columns([1, 9, 1])
         with att_col:
@@ -1651,9 +1877,9 @@ def render_chat():
         st.session_state.messages.append({"role": "assistant", "content": reply})
         if sid:
             support_db.save_message(sid, "assistant", reply)
-        st.rerun()
+        st.rerun()                              # fragment-only rerun — no blink
 
-    # ── New Chat ────────────────────────────────────────────
+    # ── New Chat ─────────────────────────────────────────────
     st.markdown("<div style='height:6px'></div>", unsafe_allow_html=True)
     _, nc, _ = st.columns([4, 1.5, 4])
     with nc:
@@ -1662,7 +1888,8 @@ def render_chat():
                 st.session_state[k] = [] if k=="messages" else ("" if k=="issue_text" else None)
             _reset_chat_state()
             st.session_state.fu_key += 1
-            st.session_state.page = "chat"; st.rerun()
+            st.session_state.page = "chat"
+            st.rerun(scope="app")
 
 
 # ═══════════════════════════════════════════════════════════

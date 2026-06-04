@@ -2,8 +2,8 @@
 GitHub DB Sync – Worksoft Support Agent
 =======================================
 • Downloads DB from GitHub on first startup (so Streamlit Cloud survives restarts).
-• Background thread auto-pushes DB to GitHub every 30 s when the file changes.
-• Manual push_db() still available for on-demand calls.
+• Background thread watches the DB file every 5 s and pushes any change to GitHub.
+• push_now() triggers an immediate async push — call after any DB write.
 """
 
 import os
@@ -15,10 +15,11 @@ import requests
 from datetime import datetime
 
 _DB_PATH       = os.path.join(os.path.dirname(os.path.abspath(__file__)), "worksoft_support.db")
-_PUSH_INTERVAL = 30   # seconds between file-change checks
+_PUSH_INTERVAL = 5    # seconds between file-change checks (near-real-time)
 _lock          = threading.Lock()
 _db_downloaded = False
 _sync_started  = False
+_push_queue    = threading.Event()  # set this to trigger an immediate push
 
 
 # ── Config ──────────────────────────────────────────────────────────────────
@@ -122,17 +123,32 @@ def push_db(message: str = "") -> tuple:
 # ── Background auto-push ─────────────────────────────────────────────────────
 
 def _sync_loop():
+    """
+    Watches the DB file every _PUSH_INTERVAL seconds.
+    Also wakes up immediately when push_now() is called via _push_queue.
+    Pushes to GitHub whenever the file modification time changes.
+    """
     last_mtime = os.path.getmtime(_DB_PATH) if os.path.exists(_DB_PATH) else 0
     while True:
-        time.sleep(_PUSH_INTERVAL)
+        # Wake up after interval OR immediately if push_now() was called
+        triggered = _push_queue.wait(timeout=_PUSH_INTERVAL)
+        _push_queue.clear()
         try:
             if os.path.exists(_DB_PATH):
                 mtime = os.path.getmtime(_DB_PATH)
-                if mtime != last_mtime:
+                if mtime != last_mtime or triggered:
                     push_db()
-                    last_mtime = mtime
+                    last_mtime = os.path.getmtime(_DB_PATH)
         except Exception as e:
             print(f"[GH Sync] Loop error: {e}")
+
+
+def push_now():
+    """
+    Signal the background thread to push immediately.
+    Call this after any write to the DB — returns instantly (non-blocking).
+    """
+    _push_queue.set()
 
 
 def ensure_db_downloaded():

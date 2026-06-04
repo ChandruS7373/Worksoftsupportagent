@@ -1642,16 +1642,23 @@ def _resolve(query: str, original_text: str, history: list) -> str:
             "- Fill any gaps with your own Worksoft expertise — the database doesn't have to "
             "cover every step; you can add context, warnings, or related checks\n"
             "- Always include exact file paths, config keys, and command values from the entries\n\n"
-            "Response format:\n"
-            "1. **One-line diagnosis** — what's causing this, in plain language\n"
-            "2. **Numbered fix steps** — each on its own line:\n"
-            "   `1. **Action** — why this step matters or what it fixes`\n"
-            "3. **Natural close** — e.g. 'Give that a go and let me know!' "
-            "or '📸 If it's still happening, share a screenshot and I'll dig deeper.'\n\n"
+            "Response format (follow this exactly):\n"
+            "1. **One-line diagnosis** — what's most likely causing this, in plain conversational language\n"
+            "2. **Numbered fix steps** — one step per line. Each step MUST have two parts separated by ' — ':\n"
+            "   - Left of ' — ': the exact action (bold the key thing to do)\n"
+            "   - Right of ' — ': a brief 'why' explaining what that step does or fixes\n"
+            "   Example: `1. **Open services.msc and restart 'Worksoft CTM Agent'** — this clears any "
+            "stale connection the agent is holding and forces it to re-register with CTM`\n"
+            "   Include exact paths, command names, or config values wherever relevant.\n"
+            "   Write each step as if you're talking someone through it at their desk — "
+            "not as a bullet from a manual.\n"
+            "3. **Natural close** — one sentence like 'Give that a go and let me know how it goes!' "
+            "or '📸 If it's still happening after step 3, grab a screenshot and I'll dig deeper.'\n\n"
             "Rules:\n"
-            "- Synthesise, don't copy-paste — understand the knowledge and explain it\n"
+            "- Synthesise, don't copy-paste — understand the knowledge and explain it in your own words\n"
             "- Sound like a knowledgeable colleague, not a knowledge base article\n"
-            "- No mention of Salesforce, case numbers, or the database\n\n"
+            "- No mention of Salesforce, case numbers, or the database\n"
+            "- Do not skip steps or merge them — each distinct action gets its own numbered line\n\n"
             f"=== KNOWLEDGE BASE ENTRIES ===\n\n{knowledge_text}"
         )
         # Store all knowledge for follow-ups (not just one case)
@@ -1667,11 +1674,18 @@ def _resolve(query: str, original_text: str, history: list) -> str:
             + "No matching entries were found in the knowledge base for this query.\n\n"
             "Use your expert Worksoft knowledge to help directly:\n"
             "- Apply the relevant section of the Worksoft domain knowledge above\n"
-            "- Diagnose the most likely cause and give clear fix steps\n"
+            "- Diagnose the most likely cause and give clear, detailed fix steps\n"
             "- Be honest if you're drawing on general expertise rather than a specific case\n\n"
-            "Response format:\n"
-            "1. **One-line diagnosis** — what's likely causing this\n"
-            "2. **Numbered fix steps** — specific, actionable\n"
+            "Response format (follow this exactly):\n"
+            "1. **One-line diagnosis** — what's most likely causing this, in plain conversational language\n"
+            "2. **Numbered fix steps** — one step per line. Each step MUST have two parts separated by ' — ':\n"
+            "   - Left of ' — ': the exact action (bold the key thing to do)\n"
+            "   - Right of ' — ': a brief 'why' explaining what that step does or fixes\n"
+            "   Example: `1. **Run iisreset from an admin command prompt** — this recycles all IIS app pools "
+            "and clears any cached session state that's blocking the login`\n"
+            "   Include exact paths, service names, or config values wherever relevant.\n"
+            "   Write each step as if you're talking someone through it at their desk — "
+            "not as a bullet from a manual.\n"
             "3. Close with: '📸 Share a screenshot if it persists — "
             "or hit ❌ Still need help to raise a ticket with the IT Admin team.'\n\n"
             "If the issue is genuinely outside your knowledge, say so briefly "
@@ -1685,7 +1699,7 @@ def _resolve(query: str, original_text: str, history: list) -> str:
         system_prompt=system_prompt,
         user_prompt=f"User's issue: {query}",
         history=history,
-        max_tokens=1000,
+        max_tokens=1500,
         stream=True,
     )
 
@@ -1853,10 +1867,23 @@ def render_chat():
                 st.session_state.session_id = sid
                 first_content = issue_desc.strip() or ""
                 file_data = _process_upload(home_file) if home_file else None
-                welcome_reply = (
-                    f"Hi **{name.strip()}**! 👋 I'm your Worksoft AI support agent.\n\n"
-                    "Describe your issue — or attach a **screenshot, log file, or PDF** "
-                    "using the 📎 icon and I'll analyze it."
+                welcome_reply = _ask_ai(
+                    system_prompt=(
+                        f"{_EXPERT_PERSONA} "
+                        "The user just signed into the Worksoft AI support portal. "
+                        "Greet them warmly and personally using their first name. "
+                        "In 2-3 sentences: welcome them, introduce yourself as their Worksoft support buddy, "
+                        "and invite them to describe their issue. "
+                        "Mention they can also attach a screenshot, log file, or PDF. "
+                        "Sound like a friendly colleague sitting next to them — not a bot reading a script. "
+                        "Vary your opener every time."
+                    ),
+                    user_prompt=f"User's name: {name.strip()}",
+                    max_tokens=130,
+                    fast=True,
+                ) or (
+                    f"Hey {name.strip()}! I'm your Worksoft support buddy — here to help you sort things out fast. "
+                    "What's going on? You can describe it in text or drop a **screenshot, log, or PDF** using the 📎 icon."
                 )
                 st.session_state.messages.append({"role": "assistant", "content": welcome_reply})
                 support_db.save_message(sid, "assistant", welcome_reply)

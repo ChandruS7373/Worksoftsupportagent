@@ -35,7 +35,8 @@ def _secret(key: str, default: str = "") -> str:
     except Exception:
         return os.environ.get(key, default)
 
-GROQ_API_KEY      = _secret("GROQ_API_KEY")
+ANTHROPIC_API_KEY = _secret("ANTHROPIC_API_KEY")
+OPENAI_API_KEY    = _secret("OPENAI_API_KEY")
 SF_USERNAME       = _secret("SF_USERNAME")
 SF_PASSWORD       = _secret("SF_PASSWORD")
 SF_SECURITY_TOKEN = _secret("SF_SECURITY_TOKEN")
@@ -318,20 +319,21 @@ div[data-testid="stFileUploader"] [data-testid="stFileUploaderFile"]{
 # ═══════════════════════════════════════════════════════════
 def _init_state():
     defaults = {
-        "page":            "chat",
-        "user":            None,
-        "messages":        [],
-        "issue_text":      "",
-        "sf_ticket":       None,
-        "fu_key":          0,
-        "pending_file":    None,
-        "session_id":      None,
-        "sf_resolution":   "",
-        "sf_case_context": "",
-        "sf_steps":        [],
-        "sf_step_idx":     0,
-        "chat_phase":      "idle",
-        "initial_issue":   "",
+        "page":                    "chat",
+        "user":                    None,
+        "messages":                [],
+        "issue_text":              "",
+        "sf_ticket":               None,
+        "fu_key":                  0,
+        "pending_file":            None,
+        "session_id":              None,
+        "sf_resolution":           "",
+        "sf_case_context":         "",
+        "sf_steps":                [],
+        "sf_step_idx":             0,
+        "chat_phase":              "idle",
+        "initial_issue":           "",
+        "resolution_check_shown":  False,
     }
     for k, v in defaults.items():
         if k not in st.session_state:
@@ -675,9 +677,13 @@ def sync_sf_knowledge() -> tuple[bool, str]:
 # ═══════════════════════════════════════════════════════════
 # AI HELPERS
 # ═══════════════════════════════════════════════════════════
-_GROQ_MODELS      = ["llama-3.3-70b-versatile", "llama-3.1-8b-instant"]
-_GROQ_FAST_MODELS = ["llama-3.1-8b-instant"]          # for cheap one-liners
-_VISION_MODELS    = ["llama-3.2-11b-vision-preview", "llama-3.2-90b-vision-preview"]
+# OpenAI models — fallback when Claude is unavailable
+_OPENAI_MODEL      = "gpt-4o"
+_OPENAI_FAST_MODEL = "gpt-4o-mini"   # cheap, fast — used for greetings / clarifying Qs
+
+# Claude models — primary AI engine (OpenAI is fallback)
+_CLAUDE_MODEL      = "claude-sonnet-4-6"
+_CLAUDE_FAST_MODEL = "claude-haiku-4-5-20251001"
 
 
 @st.cache_data(ttl=45, show_spinner=False)
@@ -702,13 +708,71 @@ def _cached_gh_info():
         return {}
 
 _EXPERT_PERSONA = (
-    "You are a smart, warm Worksoft support expert at Qualesce. "
-    "Talk exactly like ChatGPT or DeepSeek would — natural, human, conversational. "
-    "Be empathetic, concise, and helpful. Use contractions. Ask follow-up questions when you need clarity. "
-    "Never sound robotic, formal, or scripted. "
-    "You have deep knowledge of Worksoft CTM, Certify, Portal, Capture, and agent machines. "
-    "When case content is available you show it directly. When it's not, you engage naturally and troubleshoot."
+    "You are a sharp, friendly Worksoft support expert at Qualesce — think of yourself as a senior colleague "
+    "sitting right next to the user, helping them fix a problem fast. "
+    "Match the tone of ChatGPT or Gemini: warm, direct, and genuinely helpful. "
+    "Use contractions naturally (I've, you'll, let's, that's). Acknowledge what the user said before diving in. "
+    "Vary your openers — don't always start with 'Got it!' or 'Sure!'. "
+    "Be concise: no filler, no padding, no 'Great question!'. "
+    "When you give steps, make them feel like you're walking them through it, not reading from a manual. "
+    "If a step might be confusing, add a quick 'why' so they understand what it's doing. "
+    "Never sound robotic, stiff, or scripted. "
+    "You have deep expertise in Worksoft CTM, Certify, Portal, Capture, agent machines, IIS, and appsettings. "
+    "When case data is available use it precisely. When it's not, troubleshoot confidently from your own knowledge."
 )
+
+_WORKSOFT_DOMAIN = """
+=== WORKSOFT PRODUCT KNOWLEDGE ===
+
+WORKSOFT CTM (Continuous Testing Manager)
+- Orchestrates test execution across agent machines via a web-based dashboard
+- Test suites, jobs, and schedules are dispatched to Windows agent VMs
+- Key config: appsettings.config (CTM URL, timeouts, DB connection string)
+- Key paths: C:\\inetpub\\wwwroot\\CTM\\, IIS Application Pool "CTMAppPool"
+- Common issues & fixes:
+    • Agent offline / disconnected → restart "Worksoft CTM Agent" Windows service on the agent machine; verify CTM_URL in agent config matches the CTM server URL
+    • Suite stuck in "Abort Pending" → use CTM Force Abort; if unresponsive, restart agent service + iisreset on CTM server
+    • Execution timeout → increase ExecutionTimeout in appsettings.config
+    • CTM UI not loading → iisreset; check IIS app pool is Started; check event viewer for 500 errors
+    • Jobs not dispatching → verify agent machine heartbeat in CTM > Agents tab; check firewall rules on port 8080/443
+
+WORKSOFT CERTIFY
+- Windows desktop automation tool; records and plays back UI interactions
+- Common issues & fixes:
+    • Object not found / recognition failure → update object snapshot (right-click > Update); add a Sync or Wait step before the action
+    • Playback too fast → add Delay or Sync steps; lower playback speed in settings
+    • License checkout failure → check license server connectivity; release checked-out licenses from admin console
+    • Variable / data table errors → verify variable binding in test, check CSV/Excel data file path
+    • .NET errors on launch → run as Administrator; repair Certify install; clear %APPDATA%\\Worksoft
+
+WORKSOFT PORTAL
+- Web portal for test assets, user management, and reporting (IIS-hosted)
+- Common issues & fixes:
+    • Login / SSO failure → check AD group membership; verify SSO config in Portal web.config; clear browser cookies
+    • 403 / 401 errors → check IIS authentication settings; verify user has correct Portal role
+    • Slow load / timeout → recycle IIS app pool; check SQL Server connection; review IIS logs at C:\\inetpub\\logs
+    • Page not loading after update → iisreset; clear browser cache; check Portal app pool identity
+
+WORKSOFT CAPTURE
+- Browser extension + server for recording business process documentation
+- Common issues: plugin not loading → reinstall browser extension; check Capture server URL in plugin settings
+
+AGENT MACHINES (Windows VMs running Certify playback)
+- Service name: "Worksoft CTM Agent" (in services.msc)
+- Config file: CTMAgent.exe.config (CTM server URL, heartbeat interval)
+- Fix pattern: Stop service → verify config → Start service → confirm green heartbeat in CTM dashboard
+- Firewall: agent must reach CTM server on configured port (default 443 or 8080)
+
+UNIVERSAL WORKSOFT FIX TOOLKIT
+1. iisreset (run as admin) — recycles all IIS app pools; fixes most web/portal issues
+2. Restart Worksoft Windows services — open services.msc, restart anything prefixed "Worksoft"
+3. Check appsettings.config — wrong URLs, connection strings, or timeouts cause ~40% of issues
+4. Windows Event Viewer → Application/System logs — reveals the real error behind a vague UI message
+5. IIS logs at C:\\inetpub\\logs\\LogFiles\\ — shows exact HTTP errors for web components
+6. SQL Server connectivity — test with SSMS if DB-related errors; check connection string in config
+7. Run as Administrator — many Worksoft components require elevated privileges
+=== END WORKSOFT KNOWLEDGE ===
+"""
 
 _GREET_WORDS = {"hi","hello","hey","hii","helo","heya","howdy","greetings",
                 "morning","afternoon","evening","sup","yo","namaste","hai","hola"}
@@ -720,72 +784,180 @@ _GREETINGS   = _GREET_WORDS | {
 
 
 @st.cache_resource(show_spinner=False)
-def _groq_client():
-    from groq import Groq
-    return Groq(api_key=GROQ_API_KEY)
+def _anthropic_client():
+    import anthropic
+    return anthropic.Anthropic(api_key=ANTHROPIC_API_KEY)
 
 
-def _ask_groq(system_prompt: str, user_prompt: str, max_tokens: int = 800,
-              history: list = None, fast: bool = False) -> str:
+def _ask_claude(system_prompt: str, user_prompt: str, max_tokens: int = 800,
+                history: list = None, fast: bool = False, stream: bool = False) -> str:
     """
-    fast=True  → uses llama-3.1-8b-instant (cheap tasks: clarifying Q, greeting, wrap-up)
-    fast=False → uses llama-3.3-70b-versatile then falls back to 8b (answer generation)
-    history    → last 4 turns included as context (trimmed to 400 chars each)
+    Primary AI engine using Claude.
+    stream=True  → streams response word-by-word to the slot in st.session_state['_stream_slot'].
+                   Also auto-hides the typing indicator (st.session_state['_typing_slot']) on
+                   first chunk so the transition feels seamless.
+    fast=True    → uses Haiku (greeting, clarifying Q, wrap-up).
+    fast=False   → uses Sonnet (answer generation, retrieval ranking).
     """
-    if not GROQ_API_KEY:
+    if not ANTHROPIC_API_KEY:
         return ""
     try:
-        client = _groq_client()
-        messages = [{"role": "system", "content": system_prompt}]
+        import anthropic
+        client = _anthropic_client()
+        messages = []
         if history:
-            for msg in history[-4:]:          # 4 turns is enough context
+            for msg in history[-8:]:
                 role    = msg.get("role", "")
                 content = msg.get("content", "")
                 if role in ("user", "assistant") and content:
-                    messages.append({"role": role, "content": str(content)[:400]})
+                    messages.append({"role": role, "content": str(content)[:600]})
         messages.append({"role": "user", "content": user_prompt})
-        models = _GROQ_FAST_MODELS if fast else _GROQ_MODELS
-        for model in models:
+        model = _CLAUDE_FAST_MODEL if fast else _CLAUDE_MODEL
+
+        stream_slot = st.session_state.get("_stream_slot") if (stream and not fast) else None
+
+        if stream_slot is not None:
+            full = ""
             try:
-                r = client.chat.completions.create(
+                with client.messages.stream(
                     model=model,
+                    system=system_prompt,
                     messages=messages,
                     max_tokens=max_tokens,
-                    temperature=0.3,
-                )
-                reply = r.choices[0].message.content or ""
-                reply = re.sub(r"<think>.*?</think>", "", reply, flags=re.DOTALL).strip()
-                if reply:
-                    return reply
+                ) as s:
+                    for text in s.text_stream:
+                        if not full:
+                            # First chunk: hide typing indicator for smooth handoff
+                            typing = st.session_state.pop("_typing_slot", None)
+                            if typing:
+                                typing.empty()
+                        full += text
+                        stream_slot.markdown(full + " ▌")
+                if full:
+                    stream_slot.markdown(full)   # remove blinking cursor
             except Exception:
-                continue
+                if not full:
+                    return ""
+            return full
+
+        r = client.messages.create(
+            model=model,
+            system=system_prompt,
+            messages=messages,
+            max_tokens=max_tokens,
+            temperature=0.45,
+        )
+        return (r.content[0].text or "") if r.content else ""
     except Exception:
-        pass
-    return ""
+        return ""
+
+
+def _ask_ai(system_prompt: str, user_prompt: str, max_tokens: int = 800,
+            history: list = None, fast: bool = False, stream: bool = False) -> str:
+    """Claude primary → OpenAI (ChatGPT) fallback."""
+    result = _ask_claude(system_prompt, user_prompt, max_tokens, history, fast, stream)
+    if result:
+        return result
+    # OpenAI fallback — no streaming (already fell through from Claude)
+    return _ask_openai(system_prompt, user_prompt, max_tokens, history, fast)
+
+
+@st.cache_resource(show_spinner=False)
+def _openai_client():
+    from openai import OpenAI
+    return OpenAI(api_key=OPENAI_API_KEY)
+
+
+def _ask_openai(system_prompt: str, user_prompt: str, max_tokens: int = 800,
+                history: list = None, fast: bool = False) -> str:
+    """
+    OpenAI fallback — used only when Claude is unavailable.
+    fast=True  → gpt-4o-mini  (cheap, fast — greetings / clarifying Qs)
+    fast=False → gpt-4o       (full-quality answers)
+    """
+    if not OPENAI_API_KEY:
+        return ""
+    try:
+        client  = _openai_client()
+        model   = _OPENAI_FAST_MODEL if fast else _OPENAI_MODEL
+        messages = [{"role": "system", "content": system_prompt}]
+        if history:
+            for msg in history[-8:]:
+                role    = msg.get("role", "")
+                content = msg.get("content", "")
+                if role in ("user", "assistant") and content:
+                    messages.append({"role": role, "content": str(content)[:600]})
+        messages.append({"role": "user", "content": user_prompt})
+        r = client.chat.completions.create(
+            model=model,
+            messages=messages,
+            max_tokens=max_tokens,
+            temperature=0.45,
+        )
+        return (r.choices[0].message.content or "").strip()
+    except Exception:
+        return ""
+
+
+def _describe_image_claude(file_data: dict, user_text: str) -> str:
+    """Describe an uploaded screenshot using Claude Vision."""
+    if not ANTHROPIC_API_KEY:
+        return user_text
+    try:
+        import anthropic
+        client = _anthropic_client()
+        r = client.messages.create(
+            model=_CLAUDE_FAST_MODEL,
+            messages=[{"role": "user", "content": [
+                {
+                    "type": "image",
+                    "source": {
+                        "type":       "base64",
+                        "media_type": file_data["mime"],
+                        "data":       file_data["base64"],
+                    },
+                },
+                {
+                    "type": "text",
+                    "text": (
+                        "Describe the error or issue visible in this screenshot in 2 short sentences. "
+                        "Be specific about error messages, codes, and UI state. "
+                        "Only describe what you can see."
+                    ),
+                },
+            ]}],
+            max_tokens=150,
+        )
+        desc = (r.content[0].text or "").strip() if r.content else ""
+        return f"{user_text} {desc}".strip() if desc else user_text
+    except Exception:
+        return user_text
 
 
 def _describe_image(file_data: dict, user_text: str) -> str:
-    if not GROQ_API_KEY:
+    """Try Claude Vision first; fall back to OpenAI Vision (gpt-4o-mini)."""
+    result = _describe_image_claude(file_data, user_text)
+    if result != user_text:
+        return result
+    # OpenAI Vision fallback
+    if not OPENAI_API_KEY:
         return user_text
     try:
-        from groq import Groq
-        client = Groq(api_key=GROQ_API_KEY)
-        for model in _VISION_MODELS:
-            try:
-                r = client.chat.completions.create(
-                    model=model,
-                    messages=[{"role": "user", "content": [
-                        {"type": "text", "text": "Describe the error or issue in this screenshot in 2 short sentences. Only describe what you see."},
-                        {"type": "image_url", "image_url": {"url": f"data:{file_data['mime']};base64,{file_data['base64']}"}},
-                    ]}],
-                    max_tokens=120, temperature=0.0,
-                )
-                return f"{user_text} {r.choices[0].message.content}"
-            except Exception:
-                continue
+        client = _openai_client()
+        r = client.chat.completions.create(
+            model=_OPENAI_FAST_MODEL,
+            messages=[{"role": "user", "content": [
+                {"type": "text",
+                 "text": "Describe the error or issue in this screenshot in 2 short sentences. Only describe what you see."},
+                {"type": "image_url",
+                 "image_url": {"url": f"data:{file_data['mime']};base64,{file_data['base64']}"}},
+            ]}],
+            max_tokens=120,
+        )
+        desc = (r.choices[0].message.content or "").strip()
+        return f"{user_text} {desc}".strip() if desc else user_text
     except Exception:
-        pass
-    return user_text
+        return user_text
 
 
 def _build_sf_context(matches: list) -> dict:
@@ -824,12 +996,13 @@ def _is_greeting(text: str) -> bool:
 
 
 def _reset_chat_state():
-    st.session_state.sf_resolution   = ""
-    st.session_state.sf_case_context = ""
-    st.session_state.sf_steps        = []
-    st.session_state.sf_step_idx     = 0
-    st.session_state.chat_phase      = "idle"
-    st.session_state.initial_issue   = ""
+    st.session_state.sf_resolution          = ""
+    st.session_state.sf_case_context        = ""
+    st.session_state.sf_steps               = []
+    st.session_state.sf_step_idx            = 0
+    st.session_state.chat_phase             = "idle"
+    st.session_state.initial_issue          = ""
+    st.session_state.resolution_check_shown = False
 
 
 _NEXT_WORDS = {"next","ok","done","continue","yes","sure","ready","proceed",
@@ -1201,7 +1374,7 @@ def _retrieve_best_cases(query: str, top_n: int = 1) -> list:
             line += f" | {snippet}"
         sub_lines.append(line)
 
-    s1_resp = _ask_groq(
+    s1_resp = _ask_ai(
         system_prompt=(
             "You are a Worksoft support case matcher. A user has a problem. "
             "Each entry below shows: index. [CaseNum] Subject | content snippet.\n"
@@ -1216,6 +1389,7 @@ def _retrieve_best_cases(query: str, top_n: int = 1) -> list:
         ),
         user_prompt=f"User question: {query}\n\nCases:\n" + "\n".join(sub_lines),
         max_tokens=80,
+        stream=False,
     )
 
     candidate_ids: list = []
@@ -1252,7 +1426,7 @@ def _retrieve_best_cases(query: str, top_n: int = 1) -> list:
         body     = comments or desc or "(no content)"
         content_blocks.append(f"[{i+1}] Case #{case_num} — {subject}\n{body}")
 
-    s2_resp = _ask_groq(
+    s2_resp = _ask_ai(
         system_prompt=(
             "You are a Worksoft support specialist. "
             "Read each case's ACTUAL CONTENT carefully — not just the subject. "
@@ -1267,6 +1441,7 @@ def _retrieve_best_cases(query: str, top_n: int = 1) -> list:
             + "\n\n---\n\n".join(content_blocks)
         ),
         max_tokens=30,
+        stream=False,
     )
 
     if s2_resp and re.sub(r"[^a-zA-Z]", "", s2_resp).upper() != "NONE":
@@ -1290,7 +1465,7 @@ def _retrieve_best_cases(query: str, top_n: int = 1) -> list:
 # ═══════════════════════════════════════════════════════════
 # CHAT ENGINE
 # ═══════════════════════════════════════════════════════════
-def groq_chat(text: str, history: list, file_data: dict = None) -> str:
+def process_chat(text: str, history: list, file_data: dict = None) -> str:
     if file_data and file_data["type"] == "image":
         query = _describe_image(file_data, text)
     elif file_data and file_data["type"] == "text":
@@ -1304,7 +1479,7 @@ def groq_chat(text: str, history: list, file_data: dict = None) -> str:
 
     # ── GREETING ──────────────────────────────────────────────
     if _is_greeting(text) and not file_data and phase == "idle":
-        return _ask_groq(
+        return _ask_ai(
             system_prompt=(
                 f"{_EXPERT_PERSONA} The user just greeted you. "
                 f"Say hi to {user_name} by name, mention you're their Worksoft support buddy, "
@@ -1325,7 +1500,7 @@ def groq_chat(text: str, history: list, file_data: dict = None) -> str:
                  "sorted","great","perfect","awesome","solved","cheers"}
         if user_words & _DONE and len(text.strip()) < 80:
             _reset_chat_state()
-            return _ask_groq(
+            return _ask_ai(
                 system_prompt=(
                     f"{_EXPERT_PERSONA} The issue is resolved. "
                     "Wrap up warmly in 1-2 sentences and tell them to hit '✅ Yes, resolved!' below."
@@ -1337,20 +1512,26 @@ def groq_chat(text: str, history: list, file_data: dict = None) -> str:
             ) or "Glad that sorted it! Go ahead and hit **✅ Yes, resolved!** below."
 
         case_ctx = st.session_state.get("sf_case_context", "")
-        return _ask_groq(
+        return _ask_ai(
             system_prompt=(
                 f"{_EXPERT_PERSONA}\n\n"
-                "The user got the resolution and is asking a follow-up. "
-                "Respond like a colleague sitting next to them — conversational, helpful, human. "
-                "You can draw on your own Worksoft knowledge to explain further, "
-                "suggest what to check next, or troubleshoot if a step didn't work. "
-                "Keep it short and natural.\n\n"
-                + (f"Issue context: {case_ctx}\n" if case_ctx else "")
-                + f"Resolution reference:\n{sf_resolution[:1500]}"
+                f"{_WORKSOFT_DOMAIN}\n\n"
+                "The user has already received an initial answer and is now asking a follow-up. "
+                "This could be: a step that didn't work, a clarifying question, a related symptom, "
+                "or a request for more detail.\n\n"
+                "How to respond:\n"
+                "- If a step failed: diagnose WHY it might have failed and give the next thing to try\n"
+                "- If they need clarification: explain the step in simpler terms with context\n"
+                "- If it's a new symptom: use your Worksoft knowledge to reason about it\n"
+                "- Draw on BOTH the knowledge base context AND your own Worksoft expertise\n"
+                "- Keep it conversational and short — this is a back-and-forth, not a new essay\n\n"
+                + (f"Issue context: {case_ctx}\n\n" if case_ctx else "")
+                + (f"Knowledge base reference (what was already found):\n{sf_resolution[:2000]}" if sf_resolution else "")
             ),
             user_prompt=text,
             history=history,
-            max_tokens=300,
+            max_tokens=500,
+            stream=True,
         ) or "Happy to help — which step are you stuck on? I'll walk you through it."
 
     # ── INTAKE PHASE — user answered our clarifying question, now search ──
@@ -1371,130 +1552,153 @@ def groq_chat(text: str, history: list, file_data: dict = None) -> str:
     st.session_state.initial_issue = text
     st.session_state.chat_phase    = "intake"
 
-    clarifying_q = _ask_groq(
+    clarifying_q = _ask_ai(
         system_prompt=(
             f"{_EXPERT_PERSONA}\n\n"
-            "The user just described a Worksoft issue. Before looking up a solution, "
-            "ask ONE short, targeted question to understand their situation better.\n\n"
-            "Good questions to pick from (choose the most relevant ONE):\n"
-            "- Which Worksoft module is this — CTM, Certify, Portal, or Capture?\n"
-            "- What's the exact error message or error code you're seeing?\n"
-            "- Is this happening on all machines or just one specific machine?\n"
-            "- Did this start after a recent update, restart, or config change?\n"
-            "- How long has this been happening — is it new or was it working before?\n\n"
-            "Rules:\n"
-            "- Pick the ONE question that would most help narrow down the fix.\n"
-            "- Don't ask multiple questions at once.\n"
-            "- Keep it short and conversational — one sentence.\n"
-            "- Acknowledge their issue briefly before asking (e.g. 'Got it!' or 'Ah, that can be tricky —')."
+            "The user just described a Worksoft issue. Ask ONE short, targeted question to narrow it down.\n\n"
+            "Pick the most relevant question from these (don't ask more than one):\n"
+            "- Which Worksoft module — CTM, Certify, Portal, or Capture?\n"
+            "- What's the exact error message or code?\n"
+            "- Is this on all machines or just one?\n"
+            "- Did anything change recently — update, restart, config?\n"
+            "- Is this new, or was it working before?\n\n"
+            "Style rules:\n"
+            "- Vary your opener — don't always say 'Got it!'. Try 'Hmm, that sounds like...', "
+            "'Okay, a couple of things could cause this —', 'Ah, classic one —', etc.\n"
+            "- One sentence max. Conversational, not formal.\n"
+            "- Show you understood the issue before asking."
         ),
         user_prompt=f"User's issue: {text}",
         history=history,
-        max_tokens=100,
+        max_tokens=120,
         fast=True,
     )
 
-    return clarifying_q or "Got it! Just to point you to the right fix — which Worksoft module is this in: CTM, Certify, or Portal?"
+    return clarifying_q or "Hmm, a few things could cause this — which Worksoft module are you in: CTM, Certify, or Portal?"
+
+
+def _build_case_knowledge(matches: list, query: str = "") -> tuple:
+    """
+    Build a rich knowledge context from ALL matched cases.
+    Returns (knowledge_text, has_any_content, summary_for_context).
+    """
+    blocks = []
+    all_subjects = []
+    for i, case in enumerate(matches, 1):
+        subject    = (case.get("subject")     or "").strip()
+        desc       = (case.get("description") or "").strip()
+        resolution = (case.get("resolution")  or "").strip()
+        comments   = (case.get("comments")    or "").strip()
+
+        if subject:
+            all_subjects.append(subject)
+
+        parts = []
+        if subject:
+            parts.append(f"Issue type: {subject}")
+        if desc:
+            parts.append(f"Problem description:\n{desc[:800]}")
+        if resolution:
+            parts.append(f"Resolution summary:\n{resolution[:600]}")
+        if comments:
+            parts.append(f"Detailed steps/comments:\n{comments[:1800]}")
+
+        if len(parts) > 1:   # must have more than just the subject
+            blocks.append(f"── Knowledge Entry {i} ──\n" + "\n\n".join(parts))
+
+    knowledge_text  = "\n\n".join(blocks) if blocks else ""
+    has_content     = bool(blocks)
+    context_summary = "; ".join(all_subjects[:3]) if all_subjects else query
+    return knowledge_text, has_content, context_summary
 
 
 def _resolve(query: str, original_text: str, history: list) -> str:
-    """Search cases and return a conversational answer. Used by both intake and direct paths."""
-    matches = _retrieve_best_cases(query, top_n=1)
+    """
+    Retrieve up to 5 relevant cases, synthesise their knowledge with Worksoft
+    domain expertise, and stream a natural AI-generated answer.
+    """
+    matches = _retrieve_best_cases(query, top_n=5)
 
-    if not matches:
-        # ── General AI fallback ───────────────────────────────
-        # No Salesforce case matched — use Groq's own Worksoft training knowledge
-        # to still try to help before suggesting a ticket.
-        general_reply = _ask_groq(
-            system_prompt=(
-                f"{_EXPERT_PERSONA}\n\n"
-                "No specific resolved case was found in our internal knowledge base.\n\n"
-                "Use your general Worksoft knowledge (CTM, Certify, Portal, Capture, "
-                "agent machines, IIS, appsettings, services) to help.\n\n"
-                "Response structure:\n"
-                "- 1 line: briefly say this is from general knowledge, not a specific resolved case\n"
-                "- **Numbered steps** — each on its own line with a brief reason:\n"
-                "  1. **Action** — why this helps\n"
-                "  2. **Action** — why this helps\n"
-                "- End with: '📸 Share a screenshot of the error if it persists — "
-                "or hit **❌ Still need help** to raise a ticket.'\n\n"
-                "If you genuinely don't know, skip the steps and go straight to the ticket suggestion."
-            ),
-            user_prompt=f"User's issue: {query}",
-            history=history,
-            max_tokens=500,
-        )
-        if general_reply:
-            # Store as resolution context so follow-up questions work
-            st.session_state.sf_resolution   = general_reply
-            st.session_state.sf_case_context  = query
-            st.session_state.chat_phase        = "resolving"
-        return general_reply or (
-            "I couldn't find a match in our knowledge base and don't have enough info to help directly. "
-            "Hit **❌ Still need help** to raise a ticket and the team will dig in."
-        )
+    knowledge_text, has_content, ctx_summary = _build_case_knowledge(matches, query) if matches else ("", False, query)
 
-    best     = matches[0]
-    case_num = (best.get("case_number") or "").strip()
-    subject  = (best.get("subject")     or "").strip()
-    comments = (best.get("comments")    or "").strip()
-    desc     = (best.get("description") or "").strip()
-    content  = comments or desc
-
-    if not content:
-        return _ask_groq(
-            system_prompt=(
-                f"{_EXPERT_PERSONA}\n\n"
-                "You found a related case but it has no resolution notes yet. "
-                "Acknowledge the issue empathetically, say the team hasn't documented a fix yet, "
-                "and encourage them to raise a ticket. Keep it warm and brief."
-            ),
-            user_prompt=f"User's issue: {query}. Related case: {subject}",
-            history=history,
-            max_tokens=120,
-        ) or (
-            "I found a related case but there aren't resolution notes yet. "
-            "Hit **❌ Still need help** to raise a ticket and the team will dig in."
-        )
-
-    st.session_state.sf_resolution   = content
-    st.session_state.sf_case_context = f"Case #{case_num}: {subject}" if case_num else subject
-    st.session_state.sf_steps        = []
-    st.session_state.sf_step_idx     = 0
-    st.session_state.chat_phase      = "resolving"
-
-    reply = _ask_groq(
-        system_prompt=(
-            f"{_EXPERT_PERSONA}\n\n"
-            "You have a resolved case that matches the user's issue. "
-            "Understand it and present the fix in a clean structured format.\n\n"
-            "Response structure:\n"
-            "**1 line** — What's causing this (the 'why'), short and clear.\n"
-            "**Numbered steps** — Each step on its own line. Format:\n"
-            "  1. **Action** — brief reason why this step matters\n"
-            "  2. **Action** — brief reason\n"
-            "  (keep technical details exact: file paths, config keys, values)\n"
-            "**Screenshot note** — End with ONE of these based on the issue:\n"
-            "  - If a screenshot from the user would help diagnose further: "
-            "'📸 If this doesn't resolve it, share a screenshot of the error and I can dig deeper.'\n"
-            "  - If the steps are self-sufficient: "
-            "'Give that a try and let me know how it goes!'\n\n"
-            "Rules:\n"
-            "- Never invent steps not in the case — but you can add brief 'why' context to each\n"
-            "- No walls of text — keep each step tight and scannable\n"
-            "- Don't mention Salesforce or case numbers\n\n"
-            f"Case content:\n{content[:2000]}"
-        ),
-        user_prompt=f"User's issue: {query}",
-        history=history,
-        max_tokens=700,
+    # ── Build the system prompt that powers every answer ──────
+    base_system = (
+        f"{_EXPERT_PERSONA}\n\n"
+        f"{_WORKSOFT_DOMAIN}\n\n"
     )
 
-    if not reply:
-        formatted = _format_case_content(content)
-        reply = f"Here's what usually fixes this:\n\n{formatted}\n\nLet me know if any step needs clarification!"
+    if has_content:
+        # ── AI synthesises from real knowledge-base entries ───
+        system_prompt = (
+            base_system
+            + "The following entries are from our Worksoft support knowledge base "
+            "(resolved cases, comments, and documented fixes). "
+            "Read ALL of them carefully to understand the patterns before answering.\n\n"
+            "How to use this knowledge:\n"
+            "- Identify the root cause by reasoning across ALL entries — don't just copy one\n"
+            "- If multiple entries show the same fix, that fix is reliable; surface it clearly\n"
+            "- If entries show different approaches, present the most common one first, "
+            "then mention the alternative with 'If that doesn't help, also try:'\n"
+            "- Fill any gaps with your own Worksoft expertise — the database doesn't have to "
+            "cover every step; you can add context, warnings, or related checks\n"
+            "- Always include exact file paths, config keys, and command values from the entries\n\n"
+            "Response format:\n"
+            "1. **One-line diagnosis** — what's causing this, in plain language\n"
+            "2. **Numbered fix steps** — each on its own line:\n"
+            "   `1. **Action** — why this step matters or what it fixes`\n"
+            "3. **Natural close** — e.g. 'Give that a go and let me know!' "
+            "or '📸 If it's still happening, share a screenshot and I'll dig deeper.'\n\n"
+            "Rules:\n"
+            "- Synthesise, don't copy-paste — understand the knowledge and explain it\n"
+            "- Sound like a knowledgeable colleague, not a knowledge base article\n"
+            "- No mention of Salesforce, case numbers, or the database\n\n"
+            f"=== KNOWLEDGE BASE ENTRIES ===\n\n{knowledge_text}"
+        )
+        # Store all knowledge for follow-ups (not just one case)
+        st.session_state.sf_resolution   = knowledge_text[:3000]
+        st.session_state.sf_case_context = ctx_summary
+        st.session_state.sf_steps        = []
+        st.session_state.sf_step_idx     = 0
+        st.session_state.chat_phase      = "resolving"
+    else:
+        # ── Pure AI reasoning — no matching database entries ──
+        system_prompt = (
+            base_system
+            + "No matching entries were found in the knowledge base for this query.\n\n"
+            "Use your expert Worksoft knowledge to help directly:\n"
+            "- Apply the relevant section of the Worksoft domain knowledge above\n"
+            "- Diagnose the most likely cause and give clear fix steps\n"
+            "- Be honest if you're drawing on general expertise rather than a specific case\n\n"
+            "Response format:\n"
+            "1. **One-line diagnosis** — what's likely causing this\n"
+            "2. **Numbered fix steps** — specific, actionable\n"
+            "3. Close with: '📸 Share a screenshot if it persists — "
+            "or hit ❌ Still need help to raise a ticket with the IT Admin team.'\n\n"
+            "If the issue is genuinely outside your knowledge, say so briefly "
+            "and suggest raising a ticket."
+        )
+        st.session_state.sf_resolution   = ""
+        st.session_state.sf_case_context = query
+        st.session_state.chat_phase      = "resolving"
 
-    return reply
+    reply = _ask_ai(
+        system_prompt=system_prompt,
+        user_prompt=f"User's issue: {query}",
+        history=history,
+        max_tokens=1000,
+        stream=True,
+    )
+
+    if not reply and has_content:
+        # Hard fallback — AI unavailable, format raw knowledge
+        best     = matches[0]
+        raw      = (best.get("comments") or best.get("description") or "").strip()
+        reply    = f"Here's what the knowledge base says:\n\n{_format_case_content(raw)}\n\nLet me know if any step needs clarification!"
+
+    return reply or (
+        "I couldn't find a match or generate an answer right now. "
+        "Hit **❌ Still need help** to raise a ticket and the team will look into it."
+    )
 
 
 # ═══════════════════════════════════════════════════════════
@@ -1509,7 +1713,7 @@ def render_navbar():
     <div class="nav-logo">🤖</div>
     <div>
       <div class="nav-title">Worksoft AI Support</div>
-      <div class="nav-sub">Qualesce · Groq AI · Salesforce</div>
+      <div class="nav-sub">Qualesce · ChatGPT · Salesforce</div>
     </div>
   </div>
   <div class="nav-right">
@@ -1594,7 +1798,7 @@ def render_chat():
   <div class="login-banner">
     <div class="login-icon">🤖</div>
     <div class="login-title">Worksoft AI Support</div>
-    <div class="login-sub">Instant help for CTM, Certify &amp; Portal — powered by Groq AI</div>
+    <div class="login-sub">Instant help for CTM, Certify &amp; Portal — powered by ChatGPT</div>
     <div class="login-chips">
       <span class="chip chip-white">🔍 Smart AI Search</span>
       <span class="chip chip-white">📎 Screenshots</span>
@@ -1668,8 +1872,14 @@ def render_chat():
                     support_db.save_message(sid, "user", first_content, fname, ftype)
                     _typing_slot = st.empty()
                     _typing_slot.html(_TYPING_HTML)
-                    reply = groq_chat(first_content, st.session_state.messages, file_data)
+                    _stream_slot = st.empty()
+                    st.session_state["_stream_slot"] = _stream_slot
+                    st.session_state["_typing_slot"] = _typing_slot
+                    reply = process_chat(first_content, st.session_state.messages, file_data)
+                    st.session_state.pop("_stream_slot", None)
+                    st.session_state.pop("_typing_slot", None)
                     _typing_slot.empty()
+                    _stream_slot.empty()
                     st.session_state.messages.append({"role": "assistant", "content": reply})
                     support_db.save_message(sid, "assistant", reply)
                     st.session_state.fu_key += 1
@@ -1677,6 +1887,42 @@ def render_chat():
         return
 
       _live_chat()
+
+
+@st.dialog("Quick check-in 💬")
+def _show_resolution_dialog():
+    """Popup that auto-appears after 3 user exchanges to ask if the issue is resolved."""
+    user = st.session_state.get("user") or {"name": "there"}
+    name = user["name"].split()[0]
+    st.markdown(f"""
+<div style="text-align:center;padding:6px 0 22px;">
+  <div style="font-size:52px;margin-bottom:12px;">🙋</div>
+  <div style="font-size:18px;font-weight:800;color:#0f172a;margin-bottom:8px;">
+    Did that sort it, {name}?
+  </div>
+  <div style="font-size:13px;color:#64748b;line-height:1.7;">
+    We've had a few back-and-forths — let me know if you're all good<br>
+    or if you'd like me to escalate this to the IT Admin team.
+  </div>
+</div>
+""", unsafe_allow_html=True)
+
+    btn_col1, btn_col2 = st.columns(2)
+    with btn_col1:
+        if st.button("✅  Yes, I'm all good!", use_container_width=True, type="primary"):
+            st.session_state.resolution_check_shown = True
+            st.session_state.page = "resolved"
+            st.rerun(scope="app")
+    with btn_col2:
+        if st.button("🎫  Raise a ticket", use_container_width=True):
+            st.session_state.resolution_check_shown = True
+            st.session_state.page = "escalated"
+            st.rerun(scope="app")
+
+    st.markdown('<div style="margin-top:8px;"></div>', unsafe_allow_html=True)
+    if st.button("💬  Keep chatting", use_container_width=True):
+        st.session_state.resolution_check_shown = True
+        st.rerun()
 
 
 @st.fragment
@@ -1742,9 +1988,17 @@ def _live_chat():
     st.markdown('</div>', unsafe_allow_html=True)  # input-box
     st.markdown('</div>', unsafe_allow_html=True)  # input-bar
 
-    # ── Action buttons ───────────────────────────────────────
+    # ── Resolution check popup + action buttons ───────────────
     msgs = st.session_state.messages
     if msgs and msgs[-1]["role"] == "assistant" and len(msgs) >= 2:
+        user_msg_count = sum(1 for m in msgs if m["role"] == "user")
+        already_shown  = st.session_state.get("resolution_check_shown", False)
+
+        # Auto-popup after 3 complete exchanges (shown once)
+        if user_msg_count >= 3 and not already_shown:
+            _show_resolution_dialog()
+
+        # Persistent action buttons always visible after first assistant reply
         st.markdown(
             '<div style="display:flex;align-items:center;gap:8px;padding:6px 0 2px;">'
             '<span style="font-size:12px;color:#64748b;font-weight:600;margin-right:4px;">Was this helpful?</span>'
@@ -1754,10 +2008,12 @@ def _live_chat():
         rc1, rc2, _ = st.columns([1.3, 1.5, 4])
         with rc1:
             if st.button("✅ Yes, resolved!", use_container_width=True, type="primary"):
+                st.session_state.resolution_check_shown = True
                 st.session_state.page = "resolved"
                 st.rerun(scope="app")
         with rc2:
             if st.button("❌ Still need help", use_container_width=True):
+                st.session_state.resolution_check_shown = True
                 st.session_state.page = "escalated"
                 st.rerun(scope="app")
 
@@ -1779,8 +2035,17 @@ def _live_chat():
 
         _typing_slot = st.empty()
         _typing_slot.html(_TYPING_HTML)
-        reply = groq_chat(user_input.strip(), st.session_state.messages, file_data)
+        _stream_slot = st.empty()
+        st.session_state["_stream_slot"] = _stream_slot
+        st.session_state["_typing_slot"] = _typing_slot
+
+        reply = process_chat(user_input.strip(), st.session_state.messages, file_data)
+
+        # Cleanup streaming state (may already be gone if streaming fired)
+        st.session_state.pop("_stream_slot", None)
+        st.session_state.pop("_typing_slot", None)
         _typing_slot.empty()
+        _stream_slot.empty()
 
         st.session_state.messages.append({"role": "assistant", "content": reply})
         if sid:

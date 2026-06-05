@@ -334,6 +334,7 @@ def _init_state():
         "chat_phase":              "idle",
         "initial_issue":           "",
         "resolution_check_shown":  False,
+        "show_resolution_popup":   False,
         "chat_started":            False,
         "sf_diagnosis":            "",
     }
@@ -1006,6 +1007,7 @@ def _reset_chat_state():
     st.session_state.chat_phase             = "idle"
     st.session_state.initial_issue          = ""
     st.session_state.resolution_check_shown = False
+    st.session_state.show_resolution_popup  = False
 
 
 # Words that signal "I've done this step, give me the next one"
@@ -1538,17 +1540,19 @@ def process_chat(text: str, history: list, file_data: dict = None) -> str:
         case_ctx    = st.session_state.get("sf_case_context", "")
         user_words  = set(re.findall(r"[a-z]+", text.lower()))
 
-        # ── User says it's all done / resolved ────────────────
-        _RESOLVED = {"thanks","thank","resolved","fixed","sorted","great","perfect","awesome","solved","cheers"}
-        if user_words & _RESOLVED and len(text.strip()) < 80 and step_idx >= total - 1:
+        # ── User signals resolution (anywhere in the flow) ────
+        _RESOLVED = {"thanks","thank","resolved","fixed","sorted","perfect","awesome","solved","cheers","working","works"}
+        if user_words & _RESOLVED and len(text.strip()) < 100:
+            st.session_state.show_resolution_popup = True
             _reset_chat_state()
             return _ask_ai(
                 system_prompt=(
-                    f"{_EXPERT_PERSONA} The issue is fully resolved. "
-                    "Celebrate briefly (1 sentence) and tell them to hit ✅ Resolved at L1 below."
+                    f"{_EXPERT_PERSONA} The user is saying the issue is fixed. "
+                    "Acknowledge warmly in 1 short sentence. "
+                    "Then ask them to confirm by clicking ✅ Resolved at L1 or 🔺 Forward to L2 below."
                 ),
                 user_prompt=text, history=history, max_tokens=80, fast=True,
-            ) or "That's great — glad it's sorted! Hit **✅ Resolved at L1** below. 🙌"
+            ) or "Glad that worked! Please confirm below — ✅ **Resolved at L1** or 🔺 **Forward to L2**. 🙌"
 
         # ── More steps pending and user says "done / next" ────
         if sf_steps and step_idx < total - 1 and _is_next_step_request(text):
@@ -1558,11 +1562,10 @@ def process_chat(text: str, history: list, file_data: dict = None) -> str:
             left    = total - new_idx - 1
 
             if left == 0:
-                # This is the last step
                 return (
                     f"Almost there! Here's the **final step ({new_idx + 1} of {total}):**\n\n"
                     f"{new_idx + 1}. {step}\n\n"
-                    f"Give that a go and let me know if it sorted things! 🙌"
+                    f"Give that a go — let me know if it sorted things! 🙌"
                 )
             else:
                 return (
@@ -1573,15 +1576,16 @@ def process_chat(text: str, history: list, file_data: dict = None) -> str:
 
         # ── On the last step and user confirms done ────────────
         if sf_steps and step_idx == total - 1 and _is_next_step_request(text):
+            st.session_state.show_resolution_popup = True
             _reset_chat_state()
             return _ask_ai(
                 system_prompt=(
                     f"{_EXPERT_PERSONA} All troubleshooting steps are done. "
-                    "Ask if the issue is now resolved — 1-2 sentences. "
-                    "Tell them to hit ✅ Resolved at L1 if fixed, or 🔺 Forward to L2 if not."
+                    "Ask in 1-2 sentences if the issue is now resolved. "
+                    "Tell them to click ✅ Resolved at L1 if fixed, or 🔺 Forward to L2 if not."
                 ),
                 user_prompt=text, history=history, max_tokens=90, fast=True,
-            ) or "That's all the steps! Did that fix it? Hit **✅ Resolved at L1** if sorted, or **🔺 Forward to L2** if it's still happening. 🙏"
+            ) or "That's all the steps! Did it fix things? Click **✅ Resolved at L1** if sorted, or **🔺 Forward to L2** if it's still happening. 🙏"
 
         # ── Question about the current step / step failed ──────
         current_hint = ""
@@ -1874,16 +1878,16 @@ def render_chat():
 
 @st.dialog("Support Level Check 🔔")
 def _show_resolution_dialog():
-    """Popup after 3 exchanges — asks if issue is resolved at L1 or needs L2 escalation."""
+    """Popup shown when AI detects the issue is resolved — asks L1 or L2."""
     st.markdown("""
 <div style="text-align:center;padding:6px 0 18px;">
   <div style="font-size:52px;margin-bottom:12px;">🔍</div>
   <div style="font-size:18px;font-weight:800;color:#0f172a;margin-bottom:8px;">
-    Can we resolve this at L1?
+    Can we close this at L1?
   </div>
   <div style="font-size:13px;color:#64748b;line-height:1.7;">
-    Let us know if the steps resolved your issue,<br>
-    or if it needs to be forwarded to <strong>L2 support</strong>.
+    It looks like your issue may be resolved.<br>
+    Confirm below — or keep chatting if you need more help.
   </div>
 </div>
 """, unsafe_allow_html=True)
@@ -1892,17 +1896,21 @@ def _show_resolution_dialog():
     with btn_col1:
         if st.button("✅  Resolved at L1", use_container_width=True, type="primary"):
             st.session_state.resolution_check_shown = True
+            st.session_state.show_resolution_popup  = False
             st.session_state.page = "resolved"
             st.rerun(scope="app")
     with btn_col2:
         if st.button("🔺  Forward to L2", use_container_width=True):
             st.session_state.resolution_check_shown = True
+            st.session_state.show_resolution_popup  = False
             st.session_state.page = "escalated"
             st.rerun(scope="app")
 
     st.markdown('<div style="margin-top:8px;"></div>', unsafe_allow_html=True)
-    if st.button("💬  Keep chatting with AI", use_container_width=True):
-        st.session_state.resolution_check_shown = True
+    if st.button("💬  Not yet — keep chatting", use_container_width=True):
+        # Dismiss popup, let user continue without re-popping unless AI detects resolution again
+        st.session_state.resolution_check_shown = False
+        st.session_state.show_resolution_popup  = False
         st.rerun()
 
 
@@ -1981,11 +1989,10 @@ def _live_chat():
     # ── Resolution check popup + action buttons ───────────────
     msgs = st.session_state.messages
     if msgs and msgs[-1]["role"] == "assistant" and len(msgs) >= 2:
-        user_msg_count = sum(1 for m in msgs if m["role"] == "user")
-        already_shown  = st.session_state.get("resolution_check_shown", False)
+        already_shown = st.session_state.get("resolution_check_shown", False)
 
-        # Auto-popup after 3 complete exchanges (shown once)
-        if user_msg_count >= 3 and not already_shown:
+        # Popup only when the AI has determined the issue is resolved
+        if st.session_state.get("show_resolution_popup") and not already_shown:
             _show_resolution_dialog()
 
         # Persistent action buttons always visible after first assistant reply

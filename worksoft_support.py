@@ -35,8 +35,9 @@ def _secret(key: str, default: str = "") -> str:
     except Exception:
         return os.environ.get(key, default)
 
-ANTHROPIC_API_KEY = _secret("ANTHROPIC_API_KEY")
-OPENAI_API_KEY    = _secret("OPENAI_API_KEY")
+GROQ_API_KEY      = _secret("GROQ_API_KEY")
+ANTHROPIC_API_KEY = _secret("ANTHROPIC_API_KEY")   # optional fallback
+OPENAI_API_KEY    = _secret("OPENAI_API_KEY")       # optional fallback
 SF_USERNAME       = _secret("SF_USERNAME")
 SF_PASSWORD       = _secret("SF_PASSWORD")
 SF_SECURITY_TOKEN = _secret("SF_SECURITY_TOKEN")
@@ -680,13 +681,15 @@ def sync_sf_knowledge() -> tuple[bool, str]:
 
 
 # ═══════════════════════════════════════════════════════════
-# AI HELPERS
+# AI HELPERS  — Groq primary, Claude/OpenAI optional fallback
 # ═══════════════════════════════════════════════════════════
-# OpenAI models — fallback when Claude is unavailable
-_OPENAI_MODEL      = "gpt-4o"
-_OPENAI_FAST_MODEL = "gpt-4o-mini"   # cheap, fast — used for greetings / clarifying Qs
+_GROQ_MODEL        = "llama-3.3-70b-versatile"       # primary — fast + capable
+_GROQ_FAST_MODEL   = "llama-3.1-8b-instant"          # tiny calls (classification, 1-word answers)
+_GROQ_VISION_MODEL = "llama-3.2-11b-vision-preview"  # image analysis
 
-# Claude models — primary AI engine (OpenAI is fallback)
+# kept only as fallback constants (used if Groq key is missing)
+_OPENAI_MODEL      = "gpt-4o"
+_OPENAI_FAST_MODEL = "gpt-4o-mini"
 _CLAUDE_MODEL      = "claude-sonnet-4-6"
 _CLAUDE_FAST_MODEL = "claude-haiku-4-5-20251001"
 
@@ -789,178 +792,153 @@ _GREETINGS   = _GREET_WORDS | {
 
 
 @st.cache_resource(show_spinner=False)
-def _anthropic_client():
-    import anthropic
-    return anthropic.Anthropic(api_key=ANTHROPIC_API_KEY)
+def _groq_client():
+    from groq import Groq
+    return Groq(api_key=GROQ_API_KEY)
 
 
-def _ask_claude(system_prompt: str, user_prompt: str, max_tokens: int = 800,
-                history: list = None, fast: bool = False, stream: bool = False) -> str:
+def _ask_groq(
+    system_prompt: str,
+    user_prompt:   str,
+    max_tokens:    int  = 800,
+    history:       list = None,
+    fast:          bool = False,
+    stream:        bool = False,
+) -> str:
     """
-    Primary AI engine using Claude.
-    stream=True  → streams response word-by-word to the slot in st.session_state['_stream_slot'].
-                   Also auto-hides the typing indicator (st.session_state['_typing_slot']) on
-                   first chunk so the transition feels seamless.
-    fast=True    → uses Haiku (greeting, clarifying Q, wrap-up).
-    fast=False   → uses Sonnet (answer generation, retrieval ranking).
+    Groq LLM call — primary AI engine.
+    stream=True → streams token-by-token into st.session_state['_stream_slot'].
+    fast=True   → uses the smaller/faster model (for 1-word classifiers, greetings).
+    Falls back to Claude then OpenAI if GROQ_API_KEY is not set.
     """
-    if not ANTHROPIC_API_KEY:
-        return ""
+    if not GROQ_API_KEY:
+        return _ask_claude_fallback(system_prompt, user_prompt, max_tokens, history, fast, stream)
+
     try:
-        import anthropic
-        client = _anthropic_client()
-        messages = []
+        client = _groq_client()
+        model  = _GROQ_FAST_MODEL if fast else _GROQ_MODEL
+
+        messages = [{"role": "system", "content": system_prompt}]
         if history:
-            for msg in history[-8:]:
+            for msg in history[-10:]:
                 role    = msg.get("role", "")
                 content = msg.get("content", "")
                 if role in ("user", "assistant") and content:
-                    messages.append({"role": role, "content": str(content)[:600]})
+                    messages.append({"role": role, "content": str(content)[:800]})
         messages.append({"role": "user", "content": user_prompt})
-        model = _CLAUDE_FAST_MODEL if fast else _CLAUDE_MODEL
 
-        stream_slot = st.session_state.get("_stream_slot") if (stream and not fast) else None
+        stream_slot = st.session_state.get("_stream_slot") if stream else None
 
         if stream_slot is not None:
-            full = ""
-            try:
-                with client.messages.stream(
-                    model=model,
-                    system=system_prompt,
-                    messages=messages,
-                    max_tokens=max_tokens,
-                ) as s:
-                    for text in s.text_stream:
-                        if not full:
-                            # First chunk: hide typing indicator for smooth handoff
-                            typing = st.session_state.pop("_typing_slot", None)
-                            if typing:
-                                typing.empty()
-                        full += text
-                        stream_slot.markdown(full + " ▌")
-                if full:
-                    stream_slot.markdown(full)   # remove blinking cursor
-            except Exception:
-                if not full:
-                    return ""
+            full       = ""
+            completion = client.chat.completions.create(
+                model=model, messages=messages,
+                max_tokens=max_tokens, temperature=0.7, stream=True,
+            )
+            for chunk in completion:
+                delta = chunk.choices[0].delta.content or ""
+                if not full and delta:
+                    typing = st.session_state.pop("_typing_slot", None)
+                    if typing:
+                        typing.empty()
+                full += delta
+                stream_slot.markdown(full + " ▌")
+            if full:
+                stream_slot.markdown(full)
             return full
 
-        r = client.messages.create(
-            model=model,
-            system=system_prompt,
-            messages=messages,
-            max_tokens=max_tokens,
-            temperature=0.45,
+        completion = client.chat.completions.create(
+            model=model, messages=messages,
+            max_tokens=max_tokens, temperature=0.7,
         )
-        return (r.content[0].text or "") if r.content else ""
+        return (completion.choices[0].message.content or "").strip()
     except Exception:
-        return ""
+        return _ask_claude_fallback(system_prompt, user_prompt, max_tokens, history, fast, stream)
 
 
 def _ask_ai(system_prompt: str, user_prompt: str, max_tokens: int = 800,
             history: list = None, fast: bool = False, stream: bool = False) -> str:
-    """Claude primary → OpenAI (ChatGPT) fallback."""
-    result = _ask_claude(system_prompt, user_prompt, max_tokens, history, fast, stream)
-    if result:
-        return result
-    # OpenAI fallback — no streaming (already fell through from Claude)
-    return _ask_openai(system_prompt, user_prompt, max_tokens, history, fast)
+    """Single entry-point for all AI calls — routes through Groq."""
+    return _ask_groq(system_prompt, user_prompt, max_tokens, history, fast, stream)
 
 
-@st.cache_resource(show_spinner=False)
-def _openai_client():
-    from openai import OpenAI
-    return OpenAI(api_key=OPENAI_API_KEY)
+def _ask_claude_fallback(system_prompt, user_prompt, max_tokens, history, fast, stream):
+    """Claude fallback when Groq key is not configured."""
+    if not ANTHROPIC_API_KEY:
+        return _ask_openai_fallback(system_prompt, user_prompt, max_tokens, history, fast)
+    try:
+        import anthropic
+        client   = anthropic.Anthropic(api_key=ANTHROPIC_API_KEY)
+        model    = _CLAUDE_FAST_MODEL if fast else _CLAUDE_MODEL
+        msgs     = []
+        if history:
+            for m in history[-8:]:
+                if m.get("role") in ("user","assistant") and m.get("content"):
+                    msgs.append({"role": m["role"], "content": str(m["content"])[:600]})
+        msgs.append({"role": "user", "content": user_prompt})
+        stream_slot = st.session_state.get("_stream_slot") if (stream and not fast) else None
+        if stream_slot:
+            full = ""
+            with client.messages.stream(model=model, system=system_prompt,
+                                        messages=msgs, max_tokens=max_tokens) as s:
+                for txt in s.text_stream:
+                    if not full:
+                        t = st.session_state.pop("_typing_slot", None)
+                        if t: t.empty()
+                    full += txt
+                    stream_slot.markdown(full + " ▌")
+            if full: stream_slot.markdown(full)
+            return full
+        r = client.messages.create(model=model, system=system_prompt,
+                                   messages=msgs, max_tokens=max_tokens, temperature=0.45)
+        return (r.content[0].text or "") if r.content else ""
+    except Exception:
+        return _ask_openai_fallback(system_prompt, user_prompt, max_tokens, history, fast)
 
 
-def _ask_openai(system_prompt: str, user_prompt: str, max_tokens: int = 800,
-                history: list = None, fast: bool = False) -> str:
-    """
-    OpenAI fallback — used only when Claude is unavailable.
-    fast=True  → gpt-4o-mini  (cheap, fast — greetings / clarifying Qs)
-    fast=False → gpt-4o       (full-quality answers)
-    """
+def _ask_openai_fallback(system_prompt, user_prompt, max_tokens, history, fast):
+    """OpenAI last-resort fallback."""
     if not OPENAI_API_KEY:
         return ""
     try:
-        client  = _openai_client()
-        model   = _OPENAI_FAST_MODEL if fast else _OPENAI_MODEL
-        messages = [{"role": "system", "content": system_prompt}]
+        from openai import OpenAI
+        client = OpenAI(api_key=OPENAI_API_KEY)
+        model  = _OPENAI_FAST_MODEL if fast else _OPENAI_MODEL
+        msgs   = [{"role": "system", "content": system_prompt}]
         if history:
-            for msg in history[-8:]:
-                role    = msg.get("role", "")
-                content = msg.get("content", "")
-                if role in ("user", "assistant") and content:
-                    messages.append({"role": role, "content": str(content)[:600]})
-        messages.append({"role": "user", "content": user_prompt})
-        r = client.chat.completions.create(
-            model=model,
-            messages=messages,
-            max_tokens=max_tokens,
-            temperature=0.45,
-        )
+            for m in history[-8:]:
+                if m.get("role") in ("user","assistant") and m.get("content"):
+                    msgs.append({"role": m["role"], "content": str(m["content"])[:600]})
+        msgs.append({"role": "user", "content": user_prompt})
+        r = client.chat.completions.create(model=model, messages=msgs,
+                                           max_tokens=max_tokens, temperature=0.45)
         return (r.choices[0].message.content or "").strip()
     except Exception:
         return ""
 
 
-def _describe_image_claude(file_data: dict, user_text: str) -> str:
-    """Describe an uploaded screenshot using Claude Vision."""
-    if not ANTHROPIC_API_KEY:
-        return user_text
-    try:
-        import anthropic
-        client = _anthropic_client()
-        r = client.messages.create(
-            model=_CLAUDE_FAST_MODEL,
-            messages=[{"role": "user", "content": [
-                {
-                    "type": "image",
-                    "source": {
-                        "type":       "base64",
-                        "media_type": file_data["mime"],
-                        "data":       file_data["base64"],
-                    },
-                },
-                {
-                    "type": "text",
-                    "text": (
-                        "Describe the error or issue visible in this screenshot in 2 short sentences. "
-                        "Be specific about error messages, codes, and UI state. "
-                        "Only describe what you can see."
-                    ),
-                },
-            ]}],
-            max_tokens=150,
-        )
-        desc = (r.content[0].text or "").strip() if r.content else ""
-        return f"{user_text} {desc}".strip() if desc else user_text
-    except Exception:
-        return user_text
-
-
 def _describe_image(file_data: dict, user_text: str) -> str:
-    """Try Claude Vision first; fall back to OpenAI Vision (gpt-4o-mini)."""
-    result = _describe_image_claude(file_data, user_text)
-    if result != user_text:
-        return result
-    # OpenAI Vision fallback
-    if not OPENAI_API_KEY:
+    """Describe a screenshot using Groq vision model."""
+    if not GROQ_API_KEY:
         return user_text
     try:
-        client = _openai_client()
+        client = _groq_client()
         r = client.chat.completions.create(
-            model=_OPENAI_FAST_MODEL,
+            model=_GROQ_VISION_MODEL,
             messages=[{"role": "user", "content": [
-                {"type": "text",
-                 "text": "Describe the error or issue in this screenshot in 2 short sentences. Only describe what you see."},
                 {"type": "image_url",
                  "image_url": {"url": f"data:{file_data['mime']};base64,{file_data['base64']}"}},
+                {"type": "text",
+                 "text": (
+                     "Describe the error or issue visible in this Worksoft screenshot in 2 short sentences. "
+                     "Focus on error messages, codes, UI state, or warnings. "
+                     f"User also says: {user_text or '(no description provided)'}"
+                 )},
             ]}],
-            max_tokens=120,
+            max_tokens=200,
         )
         desc = (r.choices[0].message.content or "").strip()
-        return f"{user_text} {desc}".strip() if desc else user_text
+        return f"{user_text} — Screenshot shows: {desc}".strip() if desc else user_text
     except Exception:
         return user_text
 
@@ -1537,111 +1515,98 @@ def _retrieve_best_cases(query: str, top_n: int = 1) -> list:
 
 
 # ═══════════════════════════════════════════════════════════
-# CHAT ENGINE  — fully generative AI, Salesforce knowledge source
+# CHAT ENGINE  — Groq AI + Salesforce knowledge, fully conversational
 # ═══════════════════════════════════════════════════════════
 def process_chat(text: str, history: list, file_data: dict = None) -> str:
+    """
+    Single entry-point for every user message.
+    1. Describes any uploaded image/file.
+    2. Searches Salesforce for relevant resolved cases.
+    3. Sends everything to Groq and streams the response.
+    4. Detects resolution or stuck conversation for the L1/L2 popup.
+    No phase state machine — the AI handles the full conversation naturally.
+    """
+    # ── Resolve file/image input ───────────────────────────────
     if file_data and file_data["type"] == "image":
         query = _describe_image(file_data, text)
     elif file_data and file_data["type"] == "text":
-        query = f"{text} {file_data['content'][:500]}"
+        query = f"{text}\n\nAttached file content:\n{file_data['content'][:1200]}"
     else:
         query = text
 
-    phase = st.session_state.get("chat_phase", "idle")
+    # ── Pull matching Salesforce cases ─────────────────────────
+    matches = _retrieve_best_cases(query, top_n=5) if query.strip() else []
+    knowledge_text, has_content, ctx_summary = (
+        _build_case_knowledge(matches, query) if matches else ("", False, "")
+    )
+    if has_content:
+        st.session_state.sf_resolution   = knowledge_text[:3000]
+        st.session_state.sf_case_context = ctx_summary
 
-    # ── GREETING ──────────────────────────────────────────────
-    if _is_greeting(text) and not file_data and phase == "idle":
-        return _ask_ai(
-            system_prompt=(
-                f"{_EXPERT_PERSONA} The user just greeted you. "
-                "Say hi warmly in 1-2 sentences. Mention you're their Worksoft AI support assistant "
-                "and that your answers come from real Salesforce resolved cases. "
-                "Ask what they're running into."
-            ),
-            user_prompt=f"User said: '{text}'",
-            history=history,
-            max_tokens=100,
-            fast=True,
-        ) or "Hey! I'm your Worksoft AI support assistant — my answers come from real Salesforce cases. What's going on today?"
+    sf_res = st.session_state.get("sf_resolution", "")
 
-    # ── RESOLVING PHASE — streaming AI follow-up ──────────────
-    if phase == "resolving":
-        sf_res   = st.session_state.get("sf_resolution", "")
-        case_ctx = st.session_state.get("sf_case_context", "")
+    # ── Build system prompt ────────────────────────────────────
+    sf_section = ""
+    if has_content:
+        sf_section = (
+            "\n\n=== SALESFORCE KNOWLEDGE BASE (real resolved cases) ===\n"
+            + knowledge_text
+            + "\n=== END OF KNOWLEDGE BASE ===\n"
+        )
+    elif sf_res:
+        sf_section = (
+            "\n\n=== SALESFORCE KNOWLEDGE BASE (from earlier in this conversation) ===\n"
+            + sf_res[:2000]
+            + "\n=== END ===\n"
+        )
 
-        reply = _ask_ai(
-            system_prompt=(
-                f"{_EXPERT_PERSONA}\n\n"
-                f"{_WORKSOFT_DOMAIN}\n\n"
-                + (f"Salesforce knowledge base (resolved cases for this issue):\n{sf_res[:2000]}\n\n" if sf_res else "")
-                + (f"Issue context: {case_ctx}\n\n" if case_ctx else "")
-                + "You are in a live support chat. The user just replied.\n"
-                "Read their message and respond naturally:\n"
-                "- If they completed a step and want the next one → give the next relevant action clearly\n"
-                "- If a step failed or they hit an error → diagnose why in 2-3 sentences and tell them what to try\n"
-                "- If they have a question → answer it simply and conversationally\n"
-                "- If they say it's fixed / working → celebrate briefly and tell them to click ✅ Resolved at L1\n\n"
-                "Keep it SHORT and conversational — 2-4 sentences or one focused step. "
-                "This is a back-and-forth chat, not a document. "
-                "Use the Salesforce knowledge above as your source. "
-                "End every reply with a short question or prompt like 'What do you see?' or 'Let me know how that goes!'"
-            ),
-            user_prompt=text,
-            history=history,
-            max_tokens=400,
-            stream=True,
-        ) or "What exactly are you seeing right now? Tell me more and I'll help you figure it out."
+    system_prompt = (
+        f"{_EXPERT_PERSONA}\n\n"
+        f"{_WORKSOFT_DOMAIN}"
+        + sf_section
+        + """
 
-        # ── Resolution detection (fast AI call, not keyword matching) ──
-        if not st.session_state.get("show_resolution_popup") and not st.session_state.get("resolution_check_shown"):
-            if _ai_detects_resolution(history):
-                st.session_state.show_resolution_popup = True
-                st.session_state.popup_reason = "resolved"
-            else:
-                # Stuck check after 4+ exchanges
-                user_msg_count = sum(1 for m in history if m.get("role") == "user")
-                st.session_state.help_count = st.session_state.get("help_count", 0) + 1
-                if user_msg_count >= 4 and (st.session_state.help_count >= 2 or user_msg_count >= 5):
-                    if _ai_feels_stuck(history):
-                        st.session_state.show_resolution_popup = True
-                        st.session_state.popup_reason = "stuck"
+You are a smart, conversational AI support assistant for Worksoft products at Qualesce.
+You can answer ANY question the user asks.
+Your PRIMARY knowledge source is the Salesforce resolved cases above — always use them when available.
+For questions outside Worksoft, answer naturally from your general knowledge.
 
-        return reply
+CONVERSATION STYLE:
+- Be warm, direct, and concise — like a knowledgeable colleague
+- For technical Worksoft issues: give numbered steps (1. **Action** — reason)
+- For general questions: just answer naturally, no steps needed
+- Keep follow-up replies SHORT (2-4 sentences) — this is a chat, not a report
+- After giving steps, always invite the user to reply: "Let me know what happens! 👇"
+- If the user says the issue is fixed → celebrate briefly, suggest clicking ✅ Resolved at L1
+- Never mention Salesforce case IDs or database internals to the user
+"""
+    )
 
-    # ── INTAKE PHASE — user answered the clarifying question ──
-    if phase == "intake":
-        original   = st.session_state.get("initial_issue", "")
-        full_query = f"{original}. {text}".strip(". ") if original else text
-        _reset_chat_state()
-        return _resolve(full_query, history)
-
-    # ── IDLE — first real message ──────────────────────────────
-    if file_data:
-        _reset_chat_state()
-        return _resolve(query, history)
-
-    # Ask ONE clarifying question before searching Salesforce
-    st.session_state.initial_issue = text
-    st.session_state.chat_phase    = "intake"
-
-    return _ask_ai(
-        system_prompt=(
-            f"{_EXPERT_PERSONA}\n\n"
-            "The user just described a Worksoft issue. "
-            "Ask ONE short, targeted question to help narrow it down before searching.\n\n"
-            "Choose the most useful from:\n"
-            "- Which module — CTM, Certify, Portal, or Capture?\n"
-            "- What's the exact error message or code?\n"
-            "- Is this on all machines or just one?\n"
-            "- Did anything change recently (update, restart, config change)?\n"
-            "- Is this new or was it working before?\n\n"
-            "One sentence only. Conversational. Show you understood the issue first."
-        ),
-        user_prompt=f"User's issue: {text}",
+    # ── Stream Groq response ───────────────────────────────────
+    reply = _ask_ai(
+        system_prompt=system_prompt,
+        user_prompt=query,
         history=history,
-        max_tokens=120,
-        fast=True,
-    ) or "Got it — which Worksoft module are you in: CTM, Certify, Portal, or Capture?"
+        max_tokens=900,
+        stream=True,
+    ) or "I'm having trouble generating a response right now. Could you rephrase or try again?"
+
+    st.session_state.chat_phase = "resolving"
+
+    # ── Resolution / stuck detection ───────────────────────────
+    if not st.session_state.get("show_resolution_popup") and not st.session_state.get("resolution_check_shown"):
+        if _ai_detects_resolution(history + [{"role": "user", "content": text}]):
+            st.session_state.show_resolution_popup = True
+            st.session_state.popup_reason          = "resolved"
+        else:
+            user_msg_count = sum(1 for m in history if m.get("role") == "user")
+            st.session_state.help_count = st.session_state.get("help_count", 0) + 1
+            if user_msg_count >= 4 and (st.session_state.help_count >= 2 or user_msg_count >= 5):
+                if _ai_feels_stuck(history):
+                    st.session_state.show_resolution_popup = True
+                    st.session_state.popup_reason          = "stuck"
+
+    return reply
 
 
 def _build_case_knowledge(matches: list, query: str = "") -> tuple:
@@ -1677,72 +1642,6 @@ def _build_case_knowledge(matches: list, query: str = "") -> tuple:
     has_content     = bool(blocks)
     context_summary = "; ".join(all_subjects[:3]) if all_subjects else query
     return knowledge_text, has_content, context_summary
-
-
-def _resolve(query: str, history: list) -> str:
-    """
-    Pull matching Salesforce cases, feed them to the AI as knowledge,
-    and stream a conversational numbered-step answer directly to the UI.
-    """
-    matches = _retrieve_best_cases(query, top_n=5)
-    knowledge_text, has_content, ctx_summary = (
-        _build_case_knowledge(matches, query) if matches else ("", False, query)
-    )
-
-    if has_content:
-        knowledge_section = (
-            "The following are real resolved cases from our Salesforce knowledge base. "
-            "Use them as your primary source for the fix steps.\n\n"
-            f"=== SALESFORCE KNOWLEDGE BASE ===\n\n{knowledge_text}\n\n"
-            "=== END OF KNOWLEDGE BASE ===\n\n"
-        )
-        st.session_state.sf_resolution   = knowledge_text[:3000]
-        st.session_state.sf_case_context = ctx_summary
-    else:
-        knowledge_section = (
-            "No exact Salesforce case was found for this query. "
-            "Use your deep Worksoft domain expertise to answer.\n\n"
-        )
-        st.session_state.sf_resolution   = ""
-        st.session_state.sf_case_context = query
-
-    st.session_state.chat_phase = "resolving"
-
-    system_prompt = (
-        f"{_EXPERT_PERSONA}\n\n"
-        f"{_WORKSOFT_DOMAIN}\n\n"
-        + knowledge_section
-        + "Answer the user's issue conversationally with numbered steps.\n\n"
-        "FORMAT:\n"
-        "- Start with one plain sentence diagnosing the likely cause.\n"
-        "- Then give numbered fix steps:\n"
-        "    1. **[exact action]** — [brief reason why this helps]\n"
-        "    2. **[exact action]** — [brief reason]\n"
-        "    ...and so on. Each step = ONE action only.\n"
-        "- Include exact service names, file paths, config keys where relevant.\n"
-        "- End with: 'Start with Step 1 and let me know what happens — we'll go from there! 👇'\n\n"
-        "Source your steps from the Salesforce knowledge base above. "
-        "Fill gaps with your Worksoft expertise. "
-        "Sound like a knowledgeable colleague, not a manual."
-    )
-
-    reply = _ask_ai(
-        system_prompt=system_prompt,
-        user_prompt=f"User's issue: {query}",
-        history=history,
-        max_tokens=900,
-        stream=True,
-    )
-
-    if not reply and has_content:
-        best = matches[0]
-        raw  = (best.get("comments") or best.get("description") or "").strip()
-        reply = _format_case_content(raw)
-
-    return reply or (
-        "I couldn't generate an answer right now. "
-        "Use **🔺 Forward to L2** below to raise a ticket with the team."
-    )
 
 
 # ═══════════════════════════════════════════════════════════

@@ -1010,20 +1010,6 @@ def _reset_chat_state():
     st.session_state.show_resolution_popup  = False
 
 
-# Words that signal "I've done this step, give me the next one"
-_NEXT_WORDS = {
-    "next","ok","okay","done","continue","yes","sure","ready","proceed",
-    "got","good","great","worked","fixed","move","go","yep","yeah",
-    "tried","sorted","step","give","show","what","now","alright",
-}
-
-# Words that signal a step failed or something went wrong
-_FAIL_WORDS = {
-    "not","didn't","didnt","failed","fail","still","same","no","nope",
-    "isn't","isnt","wrong","error","happening","persists","again","issue",
-}
-
-
 def _parse_steps(text: str) -> tuple:
     """
     Extract (diagnosis_line, [step1_text, step2_text, ...]) from an AI response.
@@ -1041,14 +1027,6 @@ def _parse_steps(text: str) -> tuple:
             break
 
     return diagnosis, steps
-
-
-def _is_next_step_request(text: str) -> bool:
-    """True when the user's message looks like 'ok / done / ready / next step'."""
-    words = set(re.findall(r"[a-z]+", text.lower()))
-    fail  = set(re.findall(r"[a-z]+", text.lower())) & _FAIL_WORDS
-    # Must have a "next" word and NOT be a failure message
-    return bool(words & _NEXT_WORDS) and not fail and len(text.strip()) < 140
 
 
 def _format_case_content(content: str) -> str:
@@ -1531,89 +1509,95 @@ def process_chat(text: str, history: list, file_data: dict = None) -> str:
             fast=True,
         ) or "Hey! I'm your Worksoft support assistant. What's going on today?"
 
-    # ── RESOLVING PHASE — step-by-step walkthrough ────────────
+    # ── RESOLVING PHASE — fully AI-driven ────────────────────
     if phase == "resolving":
-        sf_steps    = st.session_state.get("sf_steps", [])
-        step_idx    = st.session_state.get("sf_step_idx", 0)
-        total       = len(sf_steps)
-        sf_res      = st.session_state.get("sf_resolution", "")
-        case_ctx    = st.session_state.get("sf_case_context", "")
-        user_words  = set(re.findall(r"[a-z]+", text.lower()))
+        sf_steps = st.session_state.get("sf_steps", [])
+        step_idx = st.session_state.get("sf_step_idx", 0)
+        total    = len(sf_steps)
+        sf_res   = st.session_state.get("sf_resolution", "")
+        case_ctx = st.session_state.get("sf_case_context", "")
 
-        # ── User signals resolution (anywhere in the flow) ────
-        _RESOLVED = {"thanks","thank","resolved","fixed","sorted","perfect","awesome","solved","cheers","working","works"}
-        if user_words & _RESOLVED and len(text.strip()) < 100:
-            st.session_state.show_resolution_popup = True
-            _reset_chat_state()
-            return _ask_ai(
-                system_prompt=(
-                    f"{_EXPERT_PERSONA} The user is saying the issue is fixed. "
-                    "Acknowledge warmly in 1 short sentence. "
-                    "Then ask them to confirm by clicking ✅ Resolved at L1 or 🔺 Forward to L2 below."
-                ),
-                user_prompt=text, history=history, max_tokens=80, fast=True,
-            ) or "Glad that worked! Please confirm below — ✅ **Resolved at L1** or 🔺 **Forward to L2**. 🙌"
-
-        # ── More steps pending and user says "done / next" ────
-        if sf_steps and step_idx < total - 1 and _is_next_step_request(text):
-            new_idx = step_idx + 1
-            st.session_state.sf_step_idx = new_idx
-            step    = sf_steps[new_idx]
-            left    = total - new_idx - 1
-
-            if left == 0:
-                return (
-                    f"Almost there! Here's the **final step ({new_idx + 1} of {total}):**\n\n"
-                    f"{new_idx + 1}. {step}\n\n"
-                    f"Give that a go — let me know if it sorted things! 🙌"
-                )
-            else:
-                return (
-                    f"**Step {new_idx + 1} of {total}:**\n\n"
-                    f"{new_idx + 1}. {step}\n\n"
-                    f"Let me know when you've done that — I'll give you Step {new_idx + 2}! 👇"
-                )
-
-        # ── On the last step and user confirms done ────────────
-        if sf_steps and step_idx == total - 1 and _is_next_step_request(text):
-            st.session_state.show_resolution_popup = True
-            _reset_chat_state()
-            return _ask_ai(
-                system_prompt=(
-                    f"{_EXPERT_PERSONA} All troubleshooting steps are done. "
-                    "Ask in 1-2 sentences if the issue is now resolved. "
-                    "Tell them to click ✅ Resolved at L1 if fixed, or 🔺 Forward to L2 if not."
-                ),
-                user_prompt=text, history=history, max_tokens=90, fast=True,
-            ) or "That's all the steps! Did it fix things? Click **✅ Resolved at L1** if sorted, or **🔺 Forward to L2** if it's still happening. 🙏"
-
-        # ── Question about the current step / step failed ──────
-        current_hint = ""
-        if sf_steps and step_idx < total:
-            current_hint = (
-                f"The user is currently on Step {step_idx + 1} of {total}:\n"
-                f"  {sf_steps[step_idx]}\n\n"
+        # Build step state for the AI to reason about
+        if sf_steps:
+            given_lines   = "\n".join(
+                f"  ✓ Step {i+1}: {sf_steps[i]}" for i in range(step_idx + 1)
             )
-        return _ask_ai(
-            system_prompt=(
-                f"{_EXPERT_PERSONA}\n\n{_WORKSOFT_DOMAIN}\n\n"
-                "You are guiding the user through a step-by-step fix. "
-                "They are replying — either a step failed, they have a question, or they need clarification.\n\n"
-                + current_hint
-                + "HOW TO RESPOND:\n"
-                "- Keep it SHORT — 2-4 sentences only. This is a chat, not an essay.\n"
-                "- If a step failed: say why it might have failed and what to check (1-2 sentences)\n"
-                "- If they need help understanding: explain simply, as if to a colleague\n"
-                "- Do NOT re-list all steps or give a new full answer\n"
-                "- End with a short question like 'Does that help?' or 'What do you see now?'\n\n"
-                + (f"Salesforce knowledge context:\n{sf_res[:1500]}\n\n" if sf_res else "")
-                + (f"Issue summary: {case_ctx}" if case_ctx else "")
-            ),
+            pending_lines = "\n".join(
+                f"  • Step {i+1}: {sf_steps[i]}" for i in range(step_idx + 1, total)
+            ) or "  (none — all steps have been given)"
+            step_state = (
+                f"STEP PROGRESS ({step_idx + 1} of {total} given):\n"
+                f"Steps already given to user:\n{given_lines}\n\n"
+                f"Steps NOT yet given (do NOT reveal all at once):\n{pending_lines}\n\n"
+                f"Last step given: Step {step_idx + 1} — {sf_steps[step_idx] if step_idx < total else 'all done'}\n"
+            )
+        else:
+            step_state = "No structured step list — answer freely using your knowledge.\n"
+
+        system_prompt = (
+            f"{_EXPERT_PERSONA}\n\n"
+            f"{_WORKSOFT_DOMAIN}\n\n"
+            + (f"Salesforce knowledge base:\n{sf_res[:1800]}\n\n" if sf_res else "")
+            + (f"Issue context: {case_ctx}\n\n" if case_ctx else "")
+            + step_state
+            + """
+You are having a live chat support session. The user just replied to you.
+Read their message carefully — understand what they actually mean — then decide:
+
+DECISION RULES (think, don't keyword-match):
+• Did the user say a step worked, say "done", ask to move on, or confirm they're ready?
+  → They want the NEXT step.
+• Did the user say something failed, describe an error, ask "why", or need help?
+  → They need help with the CURRENT step — answer and stay on it.
+• Did the user say the whole issue is fixed, say "thanks / all good / sorted"?
+  → The problem is resolved — confirm and close.
+
+RESPONSE FORMAT — your reply MUST start with exactly one of these tokens on its own line:
+[NEXT] — you're advancing to the next step
+[DONE] — the issue is fully resolved
+[HELP] — you're assisting with the current step (question, failure, clarification)
+
+Then a blank line. Then your actual reply to the user.
+
+RULES FOR EACH TOKEN:
+[NEXT] → Give ONLY the next pending step. Say "Step X of Y:" before it.
+          End with "Let me know when that's done! 👇"
+          If this IS the final step, end with "Let me know if that sorted it!"
+[DONE] → 1 warm sentence. Tell them to click ✅ Resolved at L1 below.
+[HELP] → 2-3 sentences MAX. Answer their specific question or diagnose the failure.
+          End with a short question ("What do you see?", "Does that help?").
+
+NEVER give more than one step at a time.
+NEVER use keyword lists — actually understand what the user is saying.
+Sound like a knowledgeable colleague, not a support script.
+"""
+        )
+
+        raw = _ask_ai(
+            system_prompt=system_prompt,
             user_prompt=text,
             history=history,
-            max_tokens=300,
-            stream=True,
-        ) or "Happy to help — what exactly are you seeing? I'll dig in with you."
+            max_tokens=350,
+        )
+
+        if not raw:
+            return "What exactly are you seeing? Tell me more and I'll help you figure it out."
+
+        # Parse the AI's decision token
+        lines   = raw.strip().split("\n")
+        token   = lines[0].strip()
+        content = "\n".join(lines[1:]).strip() if len(lines) > 1 else raw.strip()
+
+        if token == "[NEXT]":
+            new_idx = step_idx + 1
+            if new_idx < total:
+                st.session_state.sf_step_idx = new_idx
+        elif token == "[DONE]":
+            st.session_state.show_resolution_popup = True
+            _reset_chat_state()
+        # [HELP] — no state change, stay on current step
+
+        return content or raw
 
     # ── INTAKE PHASE — user answered the clarifying question ──
     if phase == "intake":

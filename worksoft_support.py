@@ -320,7 +320,7 @@ div[data-testid="stFileUploader"] [data-testid="stFileUploaderFile"]{
 def _init_state():
     defaults = {
         "page":                    "chat",
-        "user":                    None,
+        "user":                    {"name": "Guest", "email": ""},
         "messages":                [],
         "issue_text":              "",
         "sf_ticket":               None,
@@ -334,6 +334,7 @@ def _init_state():
         "chat_phase":              "idle",
         "initial_issue":           "",
         "resolution_check_shown":  False,
+        "chat_started":            False,
     }
     for k, v in defaults.items():
         if k not in st.session_state:
@@ -1473,23 +1474,21 @@ def process_chat(text: str, history: list, file_data: dict = None) -> str:
     else:
         query = text
 
-    user      = st.session_state.get("user")
-    user_name = user["name"].split()[0] if user else "there"
-    phase     = st.session_state.get("chat_phase", "idle")
+    phase = st.session_state.get("chat_phase", "idle")
 
     # ── GREETING ──────────────────────────────────────────────
     if _is_greeting(text) and not file_data and phase == "idle":
         return _ask_ai(
             system_prompt=(
                 f"{_EXPERT_PERSONA} The user just greeted you. "
-                f"Say hi to {user_name} by name, mention you're their Worksoft support buddy, "
-                "and warmly ask what they're running into. One or two sentences max."
+                "Say hi warmly, mention you're their Worksoft support assistant powered by Salesforce knowledge, "
+                "and ask what they're running into. One or two sentences max."
             ),
             user_prompt=f"User said: '{text}'",
             history=history,
             max_tokens=100,
             fast=True,
-        ) or f"Hey {user_name}! I'm your Worksoft support buddy. What's going on today?"
+        ) or "Hey! I'm your Worksoft support assistant. What's going on today?"
 
     # ── RESOLVING PHASE — follow-ups from case context ────────
     sf_resolution = st.session_state.get("sf_resolution", "")
@@ -1642,24 +1641,24 @@ def _resolve(query: str, original_text: str, history: list) -> str:
             "- Fill any gaps with your own Worksoft expertise — the database doesn't have to "
             "cover every step; you can add context, warnings, or related checks\n"
             "- Always include exact file paths, config keys, and command values from the entries\n\n"
-            "Response format (follow this exactly):\n"
-            "1. **One-line diagnosis** — what's most likely causing this, in plain conversational language\n"
-            "2. **Numbered fix steps** — one step per line. Each step MUST have two parts separated by ' — ':\n"
-            "   - Left of ' — ': the exact action (bold the key thing to do)\n"
-            "   - Right of ' — ': a brief 'why' explaining what that step does or fixes\n"
-            "   Example: `1. **Open services.msc and restart 'Worksoft CTM Agent'** — this clears any "
-            "stale connection the agent is holding and forces it to re-register with CTM`\n"
-            "   Include exact paths, command names, or config values wherever relevant.\n"
-            "   Write each step as if you're talking someone through it at their desk — "
-            "not as a bullet from a manual.\n"
-            "3. **Natural close** — one sentence like 'Give that a go and let me know how it goes!' "
-            "or '📸 If it's still happening after step 3, grab a screenshot and I'll dig deeper.'\n\n"
-            "Rules:\n"
-            "- Synthesise, don't copy-paste — understand the knowledge and explain it in your own words\n"
-            "- Sound like a knowledgeable colleague, not a knowledge base article\n"
-            "- No mention of Salesforce, case numbers, or the database\n"
-            "- Do not skip steps or merge them — each distinct action gets its own numbered line\n\n"
-            f"=== KNOWLEDGE BASE ENTRIES ===\n\n{knowledge_text}"
+            "STRICT RESPONSE FORMAT — follow this exactly, no deviations:\n\n"
+            "Start with one short diagnosis line (plain language, no bold).\n\n"
+            "Then give NUMBERED STEPS, each on its own line with a blank line between them:\n"
+            "   1. **[Bold: exact action to take]** — [why this step fixes the problem]\n"
+            "   2. **[Bold: next exact action]** — [brief reason]\n"
+            "   3. **[Bold: next action]** — [brief reason]\n"
+            "   ...and so on for every distinct action.\n\n"
+            "RULES FOR STEPS:\n"
+            "- Every step MUST be on its own numbered line\n"
+            "- Never combine two actions into one step\n"
+            "- Never write a wall of text — each step is one action only\n"
+            "- Include exact paths, service names, config keys, and command values\n"
+            "- Use 'services.msc', 'C:\\\\Program Files (x86)\\\\Worksoft\\\\...', etc. — be specific\n"
+            "- Write as if guiding someone at their desk — conversational, not manual-style\n\n"
+            "End with ONE closing sentence (e.g. 'Try step 1 first and let me know what you see!').\n\n"
+            "IMPORTANT: Source all steps from the Salesforce knowledge base entries below. "
+            "Do not invent fixes not supported by the entries. Fill gaps only with directly related Worksoft knowledge.\n\n"
+            f"=== SALESFORCE KNOWLEDGE BASE ENTRIES ===\n\n{knowledge_text}"
         )
         # Store all knowledge for follow-ups (not just one case)
         st.session_state.sf_resolution   = knowledge_text[:3000]
@@ -1671,25 +1670,24 @@ def _resolve(query: str, original_text: str, history: list) -> str:
         # ── Pure AI reasoning — no matching database entries ──
         system_prompt = (
             base_system
-            + "No matching entries were found in the knowledge base for this query.\n\n"
-            "Use your expert Worksoft knowledge to help directly:\n"
-            "- Apply the relevant section of the Worksoft domain knowledge above\n"
-            "- Diagnose the most likely cause and give clear, detailed fix steps\n"
-            "- Be honest if you're drawing on general expertise rather than a specific case\n\n"
-            "Response format (follow this exactly):\n"
-            "1. **One-line diagnosis** — what's most likely causing this, in plain conversational language\n"
-            "2. **Numbered fix steps** — one step per line. Each step MUST have two parts separated by ' — ':\n"
-            "   - Left of ' — ': the exact action (bold the key thing to do)\n"
-            "   - Right of ' — ': a brief 'why' explaining what that step does or fixes\n"
-            "   Example: `1. **Run iisreset from an admin command prompt** — this recycles all IIS app pools "
-            "and clears any cached session state that's blocking the login`\n"
-            "   Include exact paths, service names, or config values wherever relevant.\n"
-            "   Write each step as if you're talking someone through it at their desk — "
-            "not as a bullet from a manual.\n"
-            "3. Close with: '📸 Share a screenshot if it persists — "
-            "or hit ❌ Still need help to raise a ticket with the IT Admin team.'\n\n"
-            "If the issue is genuinely outside your knowledge, say so briefly "
-            "and suggest raising a ticket."
+            + "No exact match was found in the Salesforce knowledge base for this query. "
+            "Apply your Worksoft domain expertise directly.\n\n"
+            "STRICT RESPONSE FORMAT — follow this exactly:\n\n"
+            "Start with one short diagnosis line (plain language, no bold).\n\n"
+            "Then give NUMBERED STEPS, each on its own line with a blank line between them:\n"
+            "   1. **[Bold: exact action to take]** — [why this step fixes the problem]\n"
+            "   2. **[Bold: next exact action]** — [brief reason]\n"
+            "   3. **[Bold: next action]** — [brief reason]\n"
+            "   ...and so on.\n\n"
+            "RULES FOR STEPS:\n"
+            "- Every step MUST be on its own numbered line\n"
+            "- Never combine two actions into one step\n"
+            "- Never write a paragraph — each step is one action only\n"
+            "- Include exact paths, service names, config keys, and command values\n"
+            "- Write as if guiding someone at their desk\n\n"
+            "End with: '📸 Share a screenshot if this persists — "
+            "or use **🔺 Forward to L2** below to raise a ticket with the IT Admin team.'\n\n"
+            "If the issue is genuinely outside your knowledge, say so briefly and suggest forwarding to L2."
         )
         st.session_state.sf_resolution   = ""
         st.session_state.sf_case_context = query
@@ -1719,19 +1717,16 @@ def _resolve(query: str, original_text: str, history: list) -> str:
 # NAVBAR
 # ═══════════════════════════════════════════════════════════
 def render_navbar():
-    user     = st.session_state.get("user")
-    usr_pill = f'<span class="nav-user">👤 {user["name"]}</span>' if user else ""
-    st.html(f"""
+    st.html("""
 <div class="nav">
   <div class="nav-left">
     <div class="nav-logo">🤖</div>
     <div>
       <div class="nav-title">Worksoft AI Support</div>
-      <div class="nav-sub">Qualesce · ChatGPT · Salesforce</div>
+      <div class="nav-sub">Qualesce · Salesforce Knowledge</div>
     </div>
   </div>
   <div class="nav-right">
-    {usr_pill}
     <span class="nav-pill">● Online</span>
   </div>
 </div>""")
@@ -1748,16 +1743,11 @@ def _render_left_panel(col):
     info = support_db.get_sync_info()
     cnt  = info.get("case_count", 0)
     last = info.get("last_sync", "")[:16].replace("T", " ") if info.get("last_sync") else "Never"
-    user = st.session_state.get("user")
     feats = "".join([
         f'<div class="lp-feature"><span style="font-size:14px;">{i}</span>{l}</div>'
         for i, l in [("🔍","Smart AI search"),("📎","File & screenshot"),
                      ("🎫","Auto ticket"),("📧","Admin notify")]
     ])
-    user_html = (
-        f'<div class="lp-user"><div class="lp-uname">👤 {user["name"]}</div>'
-        f'<div class="lp-uemail">{user["email"]}</div></div>' if user else ""
-    )
 
     with col:
         st.markdown(f"""
@@ -1778,7 +1768,6 @@ def _render_left_panel(col):
     <div class="lp-sec-title">Capabilities</div>
     {feats}
   </div>
-  {user_html}
 </div>""", unsafe_allow_html=True)
 
         if st.button("🔄 Sync Salesforce", use_container_width=True, type="primary"):
@@ -1798,156 +1787,44 @@ def _render_left_panel(col):
 def render_chat():
     render_navbar()
 
-    user  = st.session_state.get("user")
-
     # ── Two-column layout ───────────────────────────────────
     left_col, right_col = st.columns([1, 2.6], gap="large")
     _render_left_panel(left_col)
 
     with right_col:
-      # ── Home / Identity form ──────────────────────────────
-      if not st.session_state.user:
-        st.markdown("""
-<div class="login-card anim">
-  <div class="login-banner">
-    <div class="login-icon">🤖</div>
-    <div class="login-title">Worksoft AI Support</div>
-    <div class="login-sub">Instant help for CTM, Certify &amp; Portal — powered by ChatGPT</div>
-    <div class="login-chips">
-      <span class="chip chip-white">🔍 Smart AI Search</span>
-      <span class="chip chip-white">📎 Screenshots</span>
-      <span class="chip chip-white">🎫 Auto Ticket</span>
-    </div>
-  </div>
-  <div class="login-body">
-  <div class="login-body-title">👋 Let's get started</div>
-  <div class="login-body-sub">Enter your details and describe your issue — or attach a screenshot.</div>
-""", unsafe_allow_html=True)
-
-        st.markdown('<div class="home-upload">', unsafe_allow_html=True)
-        home_file = st.file_uploader(
-            "📸 Upload a screenshot of your issue (optional)",
-            type=["png", "jpg", "jpeg", "gif", "webp", "bmp"],
-            key=f"home_fu_{st.session_state.fu_key}",
-            help="Attach an error screenshot and the AI will analyze it",
-        )
-        st.markdown('</div>', unsafe_allow_html=True)
-
-        if home_file:
-            col_prev, _ = st.columns([1, 2])
-            with col_prev:
-                st.image(home_file, caption=f"📎 {home_file.name}", use_container_width=True)
-
-        with st.form("id_form", clear_on_submit=False):
-            c1, c2 = st.columns(2)
-            with c1:
-                name  = st.text_input("Your Name *", placeholder="e.g. Aravind R")
-            with c2:
-                email = st.text_input("Your Email *", placeholder="you@qualesce.com")
-
-            issue_desc = st.text_area(
-                "Describe your issue (optional)",
-                placeholder="e.g. CTM agent not connecting after server restart…",
-                height=90,
-            )
-            go = st.form_submit_button(
-                "🚀  Start Chat",
-                use_container_width=True,
-                type="primary",
-            )
-
-        st.markdown('</div></div>', unsafe_allow_html=True)
-
-        if go:
-            if not name.strip() or not email.strip():
-                st.error("Please enter your name and email to continue.")
-            else:
-                st.session_state.user = {"name": name.strip(), "email": email.strip()}
-                sid = support_db.create_session(name.strip(), email.strip())
-                st.session_state.session_id = sid
-                first_content = issue_desc.strip() or ""
-                file_data = _process_upload(home_file) if home_file else None
-                welcome_reply = _ask_ai(
-                    system_prompt=(
-                        f"{_EXPERT_PERSONA} "
-                        "The user just signed into the Worksoft AI support portal. "
-                        "Greet them warmly and personally using their first name. "
-                        "In 2-3 sentences: welcome them, introduce yourself as their Worksoft support buddy, "
-                        "and invite them to describe their issue. "
-                        "Mention they can also attach a screenshot, log file, or PDF. "
-                        "Sound like a friendly colleague sitting next to them — not a bot reading a script. "
-                        "Vary your opener every time."
-                    ),
-                    user_prompt=f"User's name: {name.strip()}",
-                    max_tokens=130,
-                    fast=True,
-                ) or (
-                    f"Hey {name.strip()}! I'm your Worksoft support buddy — here to help you sort things out fast. "
-                    "What's going on? You can describe it in text or drop a **screenshot, log, or PDF** using the 📎 icon."
-                )
-                st.session_state.messages.append({"role": "assistant", "content": welcome_reply})
-                support_db.save_message(sid, "assistant", welcome_reply)
-                if first_content or file_data:
-                    user_msg = {"role": "user", "content": first_content}
-                    fname = home_file.name if home_file else ""
-                    ftype = (file_data or {}).get("type", "")
-                    if file_data:
-                        user_msg["file"] = file_data
-                    if not st.session_state.issue_text:
-                        st.session_state.issue_text = first_content or f"[Screenshot: {fname}]"
-                    st.session_state.messages.append(user_msg)
-                    support_db.save_message(sid, "user", first_content, fname, ftype)
-                    _typing_slot = st.empty()
-                    _typing_slot.html(_TYPING_HTML)
-                    _stream_slot = st.empty()
-                    st.session_state["_stream_slot"] = _stream_slot
-                    st.session_state["_typing_slot"] = _typing_slot
-                    reply = process_chat(first_content, st.session_state.messages, file_data)
-                    st.session_state.pop("_stream_slot", None)
-                    st.session_state.pop("_typing_slot", None)
-                    _typing_slot.empty()
-                    _stream_slot.empty()
-                    st.session_state.messages.append({"role": "assistant", "content": reply})
-                    support_db.save_message(sid, "assistant", reply)
-                    st.session_state.fu_key += 1
-                st.rerun()
-        return
-
-      _live_chat()
+        _live_chat()
 
 
-@st.dialog("Quick check-in 💬")
+@st.dialog("Support Level Check 🔔")
 def _show_resolution_dialog():
-    """Popup that auto-appears after 3 user exchanges to ask if the issue is resolved."""
-    user = st.session_state.get("user") or {"name": "there"}
-    name = user["name"].split()[0]
-    st.markdown(f"""
-<div style="text-align:center;padding:6px 0 22px;">
-  <div style="font-size:52px;margin-bottom:12px;">🙋</div>
+    """Popup after 3 exchanges — asks if issue is resolved at L1 or needs L2 escalation."""
+    st.markdown("""
+<div style="text-align:center;padding:6px 0 18px;">
+  <div style="font-size:52px;margin-bottom:12px;">🔍</div>
   <div style="font-size:18px;font-weight:800;color:#0f172a;margin-bottom:8px;">
-    Did that sort it, {name}?
+    Can we resolve this at L1?
   </div>
   <div style="font-size:13px;color:#64748b;line-height:1.7;">
-    We've had a few back-and-forths — let me know if you're all good<br>
-    or if you'd like me to escalate this to the IT Admin team.
+    Let us know if the steps resolved your issue,<br>
+    or if it needs to be forwarded to <strong>L2 support</strong>.
   </div>
 </div>
 """, unsafe_allow_html=True)
 
     btn_col1, btn_col2 = st.columns(2)
     with btn_col1:
-        if st.button("✅  Yes, I'm all good!", use_container_width=True, type="primary"):
+        if st.button("✅  Resolved at L1", use_container_width=True, type="primary"):
             st.session_state.resolution_check_shown = True
             st.session_state.page = "resolved"
             st.rerun(scope="app")
     with btn_col2:
-        if st.button("🎫  Raise a ticket", use_container_width=True):
+        if st.button("🔺  Forward to L2", use_container_width=True):
             st.session_state.resolution_check_shown = True
             st.session_state.page = "escalated"
             st.rerun(scope="app")
 
     st.markdown('<div style="margin-top:8px;"></div>', unsafe_allow_html=True)
-    if st.button("💬  Keep chatting", use_container_width=True):
+    if st.button("💬  Keep chatting with AI", use_container_width=True):
         st.session_state.resolution_check_shown = True
         st.rerun()
 
@@ -1957,8 +1834,17 @@ def _live_chat():
     """
     Fragment: only the chat panel reruns on each message — sidebar/navbar stay frozen.
     """
-    user  = st.session_state.get("user")
-    uname = user["name"] if user else ""
+    # ── Auto-welcome on very first load ──────────────────────
+    if not st.session_state.get("chat_started"):
+        st.session_state.chat_started = True
+        welcome = (
+            "Hi there! I'm your **Worksoft AI Support Assistant** — "
+            "my answers are sourced directly from Salesforce resolved cases and our knowledge base.\n\n"
+            "I'll walk you through fixes **one step at a time** so nothing gets missed. "
+            "Just tell me what's going on — or attach a screenshot, log file, or PDF using the 📎 icon.\n\n"
+            "Which Worksoft product are you having trouble with? *(CTM, Certify, Portal, or Capture)*"
+        )
+        st.session_state.messages.append({"role": "assistant", "content": welcome})
 
     # ── Chat window header ───────────────────────────────────
     st.html(f"""
@@ -1967,7 +1853,7 @@ def _live_chat():
     <div class="chead-left">
       <div class="chead-av">🤖</div>
       <div>
-        <div class="chead-name">Qualesce AI Support{(" — " + uname) if uname else ""}</div>
+        <div class="chead-name">Qualesce AI Support</div>
         <div class="chead-sub">CTM · Certify · Portal · Capture</div>
         <span class="chead-status"><span class="chead-dot"></span>Online</span>
       </div>
@@ -2028,18 +1914,19 @@ def _live_chat():
         # Persistent action buttons always visible after first assistant reply
         st.markdown(
             '<div style="display:flex;align-items:center;gap:8px;padding:6px 0 2px;">'
-            '<span style="font-size:12px;color:#64748b;font-weight:600;margin-right:4px;">Was this helpful?</span>'
+            '<span style="font-size:12px;color:#64748b;font-weight:600;margin-right:4px;">'
+            'Support level:</span>'
             '</div>',
             unsafe_allow_html=True,
         )
-        rc1, rc2, _ = st.columns([1.3, 1.5, 4])
+        rc1, rc2, _ = st.columns([1.5, 1.7, 3])
         with rc1:
-            if st.button("✅ Yes, resolved!", use_container_width=True, type="primary"):
+            if st.button("✅ Resolved at L1", use_container_width=True, type="primary"):
                 st.session_state.resolution_check_shown = True
                 st.session_state.page = "resolved"
                 st.rerun(scope="app")
         with rc2:
-            if st.button("❌ Still need help", use_container_width=True):
+            if st.button("🔺 Forward to L2", use_container_width=True):
                 st.session_state.resolution_check_shown = True
                 st.session_state.page = "escalated"
                 st.rerun(scope="app")
@@ -2054,6 +1941,10 @@ def _live_chat():
             user_msg["file"] = file_data
         if not st.session_state.issue_text:
             st.session_state.issue_text = user_input.strip() or f"[Attached: {fname}]"
+
+        # Auto-create session on first message (no login required)
+        if not st.session_state.get("session_id"):
+            st.session_state.session_id = support_db.create_session("Guest", "")
 
         st.session_state.messages.append(user_msg)
         sid = st.session_state.get("session_id")
@@ -2085,8 +1976,7 @@ def _live_chat():
 # ═══════════════════════════════════════════════════════════
 def render_resolved():
     render_navbar()
-    user = st.session_state.user or {"name": "there"}
-    st.markdown(f"""
+    st.markdown("""
 <div style="max-width:480px;margin:48px auto;text-align:center;
      background:rgba(255,255,255,.88);backdrop-filter:blur(18px);
      border:1.5px solid rgba(22,163,74,.25);border-radius:24px;
@@ -2095,7 +1985,7 @@ def render_resolved():
   <div style="font-size:56px;margin-bottom:12px;">🎉</div>
   <div style="font-size:22px;font-weight:900;color:#16a34a;margin-bottom:8px;">Issue Resolved!</div>
   <div style="font-size:14px;color:#475569;margin-bottom:24px;">
-    Glad I could help, <strong style="color:#0f172a;">{user["name"]}</strong>!<br>
+    Glad that sorted it!<br>
     Come back anytime you need Worksoft support.
   </div>
   <div style="background:#dcfce7;border:1px solid rgba(22,163,74,.25);
@@ -2109,8 +1999,11 @@ def render_resolved():
             sid = st.session_state.get("session_id")
             if sid:
                 support_db.update_session_status(sid, "resolved")
-            for k in ["messages","issue_text","sf_ticket","user","session_id"]:
-                st.session_state[k] = [] if k=="messages" else ("" if k=="issue_text" else None)
+            st.session_state.messages  = []
+            st.session_state.issue_text = ""
+            st.session_state.sf_ticket  = None
+            st.session_state.session_id = None
+            st.session_state.chat_started = False
             _reset_chat_state()
             st.session_state.page = "chat"; st.rerun()
 
@@ -2120,10 +2013,10 @@ def render_resolved():
 # ═══════════════════════════════════════════════════════════
 def render_escalated():
     render_navbar()
-    user       = st.session_state.user or {"name":"User","email":""}
     issue_text = st.session_state.issue_text or "Worksoft issue (see conversation)"
 
     if st.session_state.sf_ticket:
+        user = st.session_state.user or {"name": "Guest", "email": ""}
         _render_ticket(user, st.session_state.sf_ticket); return
 
     st.markdown("""
@@ -2132,14 +2025,19 @@ def render_escalated():
      border:1.5px solid rgba(30,64,175,.15);border-radius:20px;
      box-shadow:0 8px 28px rgba(30,64,175,.10);
      padding:24px 28px;" class="anim">
-  <div style="font-size:28px;margin-bottom:8px;">🔔</div>
-  <div style="font-size:17px;font-weight:800;color:#0f172a;margin-bottom:4px;">Escalating to IT Admin</div>
+  <div style="font-size:28px;margin-bottom:8px;">🔺</div>
+  <div style="font-size:17px;font-weight:800;color:#0f172a;margin-bottom:4px;">Forwarding to L2 Support</div>
   <div style="font-size:13px;color:#64748b;">
-    We'll raise a Salesforce case and notify the IT Admin.<br>You'll be CC'd on the email with the case link.
+    A Salesforce case will be raised and the L2 team notified.<br>Add your contact details to receive email updates.
   </div>
 </div>""", unsafe_allow_html=True)
 
     with st.form("esc_form"):
+        c1, c2 = st.columns(2)
+        with c1:
+            esc_name  = st.text_input("Your Name (optional)", placeholder="e.g. Aravind R")
+        with c2:
+            esc_email = st.text_input("Your Email (optional)", placeholder="you@qualesce.com")
         extra    = st.text_area("Additional details (optional)",
                                 placeholder="Error code, business impact, steps already tried…", height=90)
         priority = st.selectbox("Priority", ["High","Critical","Medium","Low"])
@@ -2147,12 +2045,18 @@ def render_escalated():
                                          use_container_width=True, type="primary")
 
     if submit:
+        user_name  = esc_name.strip()  or "Guest"
+        user_email = esc_email.strip() or ""
+        user = {"name": user_name, "email": user_email}
+        st.session_state.user = user
+
         convo = "\n\n".join(
             f"{'User' if m['role']=='user' else 'Agent'}: {m['content']}"
             for m in st.session_state.messages
         )
         desc = (
-            f"Reported by: {user['name']} ({user['email']})\n\nIssue:\n{issue_text}"
+            f"Reported by: {user_name}" + (f" ({user_email})" if user_email else "") +
+            f"\n\nIssue:\n{issue_text}"
             + (f"\n\nAdditional Details:\n{extra}" if extra.strip() else "")
             + f"\n\nAI Chat:\n{convo}"
         )
@@ -2223,7 +2127,7 @@ def _render_ticket(user, ticket):
   <div class="ticket-num">#{case_num}</div>
   <div class="ticket-row">
     <span class="ticket-lbl">Raised by</span>
-    <span class="ticket-val">{user["name"]} ({user["email"]})</span>
+    <span class="ticket-val">{user["name"]}{(" (" + user["email"] + ")") if user.get("email") else ""}</span>
   </div>
   <div class="ticket-row">
     <span class="ticket-lbl">Priority</span>
@@ -2247,7 +2151,8 @@ def _render_ticket(user, ticket):
 </div>""", unsafe_allow_html=True)
 
     if email_ok:
-        st.success(f"✅ IT Admin notified ({IT_ADMIN_EMAIL}) · You've been CC'd at {user['email']}")
+        cc_note = f" · You've been CC'd at {user['email']}" if user.get("email") else ""
+        st.success(f"✅ IT Admin notified ({IT_ADMIN_EMAIL}){cc_note}")
     else:
         st.warning(f"Email failed: {ticket.get('email_err','Unknown')}. Ticket exists in Salesforce.")
 
@@ -2260,8 +2165,12 @@ def _render_ticket(user, ticket):
     c1, c2 = st.columns(2)
     with c1:
         if st.button("🆕 New Chat", use_container_width=True, type="primary"):
-            for k in ["messages","issue_text","sf_ticket","user","session_id"]:
-                st.session_state[k] = [] if k=="messages" else ("" if k=="issue_text" else None)
+            st.session_state.messages   = []
+            st.session_state.issue_text = ""
+            st.session_state.sf_ticket  = None
+            st.session_state.session_id = None
+            st.session_state.user       = {"name": "Guest", "email": ""}
+            st.session_state.chat_started = False
             _reset_chat_state()
             st.session_state.page = "chat"; st.rerun()
     with c2:

@@ -335,6 +335,7 @@ def _init_state():
         "initial_issue":           "",
         "resolution_check_shown":  False,
         "chat_started":            False,
+        "sf_diagnosis":            "",
     }
     for k, v in defaults.items():
         if k not in st.session_state:
@@ -1001,13 +1002,51 @@ def _reset_chat_state():
     st.session_state.sf_case_context        = ""
     st.session_state.sf_steps               = []
     st.session_state.sf_step_idx            = 0
+    st.session_state.sf_diagnosis           = ""
     st.session_state.chat_phase             = "idle"
     st.session_state.initial_issue          = ""
     st.session_state.resolution_check_shown = False
 
 
-_NEXT_WORDS = {"next","ok","done","continue","yes","sure","ready","proceed",
-               "got","good","great","worked","fixed","move","go","yep","yeah"}
+# Words that signal "I've done this step, give me the next one"
+_NEXT_WORDS = {
+    "next","ok","okay","done","continue","yes","sure","ready","proceed",
+    "got","good","great","worked","fixed","move","go","yep","yeah",
+    "tried","sorted","step","give","show","what","now","alright",
+}
+
+# Words that signal a step failed or something went wrong
+_FAIL_WORDS = {
+    "not","didn't","didnt","failed","fail","still","same","no","nope",
+    "isn't","isnt","wrong","error","happening","persists","again","issue",
+}
+
+
+def _parse_steps(text: str) -> tuple:
+    """
+    Extract (diagnosis_line, [step1_text, step2_text, ...]) from an AI response.
+    Expects numbered steps like '1. **Action** — reason'.
+    """
+    step_re = re.compile(r"(?m)^\s*(\d+)\.\s+(.+)$")
+    steps   = [m.group(2).strip() for m in step_re.finditer(text)]
+
+    # Diagnosis = first non-blank line that doesn't start with a digit
+    diagnosis = ""
+    for line in text.split("\n"):
+        line = line.strip()
+        if line and not re.match(r"^\d+\.", line):
+            diagnosis = line
+            break
+
+    return diagnosis, steps
+
+
+def _is_next_step_request(text: str) -> bool:
+    """True when the user's message looks like 'ok / done / ready / next step'."""
+    words = set(re.findall(r"[a-z]+", text.lower()))
+    fail  = set(re.findall(r"[a-z]+", text.lower())) & _FAIL_WORDS
+    # Must have a "next" word and NOT be a failure message
+    return bool(words & _NEXT_WORDS) and not fail and len(text.strip()) < 140
 
 
 def _format_case_content(content: str) -> str:
@@ -1337,8 +1376,8 @@ def _render_messages_html(messages: list) -> str:
     return _CHAT_TMPL.render(css=_CHAT_CSS, messages=prepared)
 
 
-def _parse_steps(content: str) -> list:
-    """Split case content into individual steps by numbered list, then paragraph, then line."""
+def _split_case_content(content: str) -> list:
+    """Split raw case content into individual steps by numbered list, paragraph, or line."""
     parts = re.split(r'(?m)(?=^\s*\d+[\.\)]\s)', content)
     steps = [p.strip() for p in parts if p.strip()]
     if len(steps) > 1:
@@ -1464,7 +1503,7 @@ def _retrieve_best_cases(query: str, top_n: int = 1) -> list:
 
 
 # ═══════════════════════════════════════════════════════════
-# CHAT ENGINE
+# CHAT ENGINE  (conversational, step-by-step)
 # ═══════════════════════════════════════════════════════════
 def process_chat(text: str, history: list, file_data: dict = None) -> str:
     if file_data and file_data["type"] == "image":
@@ -1490,90 +1529,124 @@ def process_chat(text: str, history: list, file_data: dict = None) -> str:
             fast=True,
         ) or "Hey! I'm your Worksoft support assistant. What's going on today?"
 
-    # ── RESOLVING PHASE — follow-ups from case context ────────
-    sf_resolution = st.session_state.get("sf_resolution", "")
+    # ── RESOLVING PHASE — step-by-step walkthrough ────────────
+    if phase == "resolving":
+        sf_steps    = st.session_state.get("sf_steps", [])
+        step_idx    = st.session_state.get("sf_step_idx", 0)
+        total       = len(sf_steps)
+        sf_res      = st.session_state.get("sf_resolution", "")
+        case_ctx    = st.session_state.get("sf_case_context", "")
+        user_words  = set(re.findall(r"[a-z]+", text.lower()))
 
-    if phase == "resolving" and sf_resolution:
-        user_words = set(re.findall(r"[a-z]+", text.lower()))
-        _DONE = {"thanks","thank","resolved","fixed","worked","done",
-                 "sorted","great","perfect","awesome","solved","cheers"}
-        if user_words & _DONE and len(text.strip()) < 80:
+        # ── User says it's all done / resolved ────────────────
+        _RESOLVED = {"thanks","thank","resolved","fixed","sorted","great","perfect","awesome","solved","cheers"}
+        if user_words & _RESOLVED and len(text.strip()) < 80 and step_idx >= total - 1:
             _reset_chat_state()
             return _ask_ai(
                 system_prompt=(
-                    f"{_EXPERT_PERSONA} The issue is resolved. "
-                    "Wrap up warmly in 1-2 sentences and tell them to hit '✅ Yes, resolved!' below."
+                    f"{_EXPERT_PERSONA} The issue is fully resolved. "
+                    "Celebrate briefly (1 sentence) and tell them to hit ✅ Resolved at L1 below."
                 ),
-                user_prompt=text,
-                history=history,
-                max_tokens=80,
-                fast=True,
-            ) or "Glad that sorted it! Go ahead and hit **✅ Yes, resolved!** below."
+                user_prompt=text, history=history, max_tokens=80, fast=True,
+            ) or "That's great — glad it's sorted! Hit **✅ Resolved at L1** below. 🙌"
 
-        case_ctx = st.session_state.get("sf_case_context", "")
+        # ── More steps pending and user says "done / next" ────
+        if sf_steps and step_idx < total - 1 and _is_next_step_request(text):
+            new_idx = step_idx + 1
+            st.session_state.sf_step_idx = new_idx
+            step    = sf_steps[new_idx]
+            left    = total - new_idx - 1
+
+            if left == 0:
+                # This is the last step
+                return (
+                    f"Almost there! Here's the **final step ({new_idx + 1} of {total}):**\n\n"
+                    f"{new_idx + 1}. {step}\n\n"
+                    f"Give that a go and let me know if it sorted things! 🙌"
+                )
+            else:
+                return (
+                    f"**Step {new_idx + 1} of {total}:**\n\n"
+                    f"{new_idx + 1}. {step}\n\n"
+                    f"Let me know when you've done that — I'll give you Step {new_idx + 2}! 👇"
+                )
+
+        # ── On the last step and user confirms done ────────────
+        if sf_steps and step_idx == total - 1 and _is_next_step_request(text):
+            _reset_chat_state()
+            return _ask_ai(
+                system_prompt=(
+                    f"{_EXPERT_PERSONA} All troubleshooting steps are done. "
+                    "Ask if the issue is now resolved — 1-2 sentences. "
+                    "Tell them to hit ✅ Resolved at L1 if fixed, or 🔺 Forward to L2 if not."
+                ),
+                user_prompt=text, history=history, max_tokens=90, fast=True,
+            ) or "That's all the steps! Did that fix it? Hit **✅ Resolved at L1** if sorted, or **🔺 Forward to L2** if it's still happening. 🙏"
+
+        # ── Question about the current step / step failed ──────
+        current_hint = ""
+        if sf_steps and step_idx < total:
+            current_hint = (
+                f"The user is currently on Step {step_idx + 1} of {total}:\n"
+                f"  {sf_steps[step_idx]}\n\n"
+            )
         return _ask_ai(
             system_prompt=(
-                f"{_EXPERT_PERSONA}\n\n"
-                f"{_WORKSOFT_DOMAIN}\n\n"
-                "The user has already received an initial answer and is now asking a follow-up. "
-                "This could be: a step that didn't work, a clarifying question, a related symptom, "
-                "or a request for more detail.\n\n"
-                "How to respond:\n"
-                "- If a step failed: diagnose WHY it might have failed and give the next thing to try\n"
-                "- If they need clarification: explain the step in simpler terms with context\n"
-                "- If it's a new symptom: use your Worksoft knowledge to reason about it\n"
-                "- Draw on BOTH the knowledge base context AND your own Worksoft expertise\n"
-                "- Keep it conversational and short — this is a back-and-forth, not a new essay\n\n"
-                + (f"Issue context: {case_ctx}\n\n" if case_ctx else "")
-                + (f"Knowledge base reference (what was already found):\n{sf_resolution[:2000]}" if sf_resolution else "")
+                f"{_EXPERT_PERSONA}\n\n{_WORKSOFT_DOMAIN}\n\n"
+                "You are guiding the user through a step-by-step fix. "
+                "They are replying — either a step failed, they have a question, or they need clarification.\n\n"
+                + current_hint
+                + "HOW TO RESPOND:\n"
+                "- Keep it SHORT — 2-4 sentences only. This is a chat, not an essay.\n"
+                "- If a step failed: say why it might have failed and what to check (1-2 sentences)\n"
+                "- If they need help understanding: explain simply, as if to a colleague\n"
+                "- Do NOT re-list all steps or give a new full answer\n"
+                "- End with a short question like 'Does that help?' or 'What do you see now?'\n\n"
+                + (f"Salesforce knowledge context:\n{sf_res[:1500]}\n\n" if sf_res else "")
+                + (f"Issue summary: {case_ctx}" if case_ctx else "")
             ),
             user_prompt=text,
             history=history,
-            max_tokens=500,
+            max_tokens=300,
             stream=True,
-        ) or "Happy to help — which step are you stuck on? I'll walk you through it."
+        ) or "Happy to help — what exactly are you seeing? I'll dig in with you."
 
-    # ── INTAKE PHASE — user answered our clarifying question, now search ──
+    # ── INTAKE PHASE — user answered the clarifying question ──
     if phase == "intake":
         original   = st.session_state.get("initial_issue", "")
-        # Combine original issue + clarification for richer search
         full_query = f"{original}. {text}".strip(". ") if original else text
         _reset_chat_state()
-        return _resolve(full_query, text, history)
+        return _resolve(full_query, history)
 
     # ── IDLE — first message on this issue ────────────────────
-    # Images/files: skip clarification and go straight to answer
     if file_data:
         _reset_chat_state()
-        return _resolve(query, text, history)
+        return _resolve(query, history)
 
-    # Store the issue and ask ONE smart clarifying question before answering
+    # Store issue, ask ONE clarifying question, then wait for answer
     st.session_state.initial_issue = text
     st.session_state.chat_phase    = "intake"
 
-    clarifying_q = _ask_ai(
+    return _ask_ai(
         system_prompt=(
             f"{_EXPERT_PERSONA}\n\n"
             "The user just described a Worksoft issue. Ask ONE short, targeted question to narrow it down.\n\n"
-            "Pick the most relevant question from these (don't ask more than one):\n"
-            "- Which Worksoft module — CTM, Certify, Portal, or Capture?\n"
+            "Choose the most useful question from:\n"
+            "- Which module — CTM, Certify, Portal, or Capture?\n"
             "- What's the exact error message or code?\n"
             "- Is this on all machines or just one?\n"
-            "- Did anything change recently — update, restart, config?\n"
+            "- Did anything change recently (update, restart, config change)?\n"
             "- Is this new, or was it working before?\n\n"
-            "Style rules:\n"
-            "- Vary your opener — don't always say 'Got it!'. Try 'Hmm, that sounds like...', "
-            "'Okay, a couple of things could cause this —', 'Ah, classic one —', etc.\n"
-            "- One sentence max. Conversational, not formal.\n"
+            "Rules:\n"
+            "- One sentence only. Conversational, not formal.\n"
+            "- Vary your opener — don't always say 'Got it!'\n"
             "- Show you understood the issue before asking."
         ),
         user_prompt=f"User's issue: {text}",
         history=history,
         max_tokens=120,
         fast=True,
-    )
-
-    return clarifying_q or "Hmm, a few things could cause this — which Worksoft module are you in: CTM, Certify, or Portal?"
+    ) or "Hmm, a few things could cause this — which Worksoft module are you in: CTM, Certify, or Portal?"
 
 
 def _build_case_knowledge(matches: list, query: str = "") -> tuple:
@@ -1611,106 +1684,110 @@ def _build_case_knowledge(matches: list, query: str = "") -> tuple:
     return knowledge_text, has_content, context_summary
 
 
-def _resolve(query: str, original_text: str, history: list) -> str:
+def _resolve(query: str, history: list) -> str:
     """
-    Retrieve up to 5 relevant cases, synthesise their knowledge with Worksoft
-    domain expertise, and stream a natural AI-generated answer.
+    Retrieve Salesforce cases, generate ALL fix steps via AI (non-streaming),
+    then serve only Step 1 — the rest are served one-at-a-time as the user
+    confirms each step is done.
     """
     matches = _retrieve_best_cases(query, top_n=5)
+    knowledge_text, has_content, ctx_summary = (
+        _build_case_knowledge(matches, query) if matches else ("", False, query)
+    )
 
-    knowledge_text, has_content, ctx_summary = _build_case_knowledge(matches, query) if matches else ("", False, query)
+    base_system = f"{_EXPERT_PERSONA}\n\n{_WORKSOFT_DOMAIN}\n\n"
 
-    # ── Build the system prompt that powers every answer ──────
-    base_system = (
-        f"{_EXPERT_PERSONA}\n\n"
-        f"{_WORKSOFT_DOMAIN}\n\n"
+    step_format = (
+        "OUTPUT FORMAT — follow exactly:\n"
+        "Line 1: One plain-English diagnosis sentence (no bold, no bullet).\n"
+        "Blank line.\n"
+        "Then numbered steps, one per line:\n"
+        "1. **[exact action]** — [brief why it fixes the issue]\n"
+        "2. **[exact action]** — [brief why]\n"
+        "3. **[exact action]** — [brief why]\n"
+        "...and so on.\n\n"
+        "RULES:\n"
+        "- Each step = ONE action only. Never combine two actions.\n"
+        "- Include exact service names, file paths, config keys (e.g. services.msc, "
+        "C:\\\\Program Files (x86)\\\\Worksoft\\\\CTM Agent Manager\\\\appsettings.config).\n"
+        "- No closing sentence. Steps only.\n"
     )
 
     if has_content:
-        # ── AI synthesises from real knowledge-base entries ───
         system_prompt = (
             base_system
-            + "The following entries are from our Worksoft support knowledge base "
-            "(resolved cases, comments, and documented fixes). "
-            "Read ALL of them carefully to understand the patterns before answering.\n\n"
-            "How to use this knowledge:\n"
-            "- Identify the root cause by reasoning across ALL entries — don't just copy one\n"
-            "- If multiple entries show the same fix, that fix is reliable; surface it clearly\n"
-            "- If entries show different approaches, present the most common one first, "
-            "then mention the alternative with 'If that doesn't help, also try:'\n"
-            "- Fill any gaps with your own Worksoft expertise — the database doesn't have to "
-            "cover every step; you can add context, warnings, or related checks\n"
-            "- Always include exact file paths, config keys, and command values from the entries\n\n"
-            "STRICT RESPONSE FORMAT — follow this exactly, no deviations:\n\n"
-            "Start with one short diagnosis line (plain language, no bold).\n\n"
-            "Then give NUMBERED STEPS, each on its own line with a blank line between them:\n"
-            "   1. **[Bold: exact action to take]** — [why this step fixes the problem]\n"
-            "   2. **[Bold: next exact action]** — [brief reason]\n"
-            "   3. **[Bold: next action]** — [brief reason]\n"
-            "   ...and so on for every distinct action.\n\n"
-            "RULES FOR STEPS:\n"
-            "- Every step MUST be on its own numbered line\n"
-            "- Never combine two actions into one step\n"
-            "- Never write a wall of text — each step is one action only\n"
-            "- Include exact paths, service names, config keys, and command values\n"
-            "- Use 'services.msc', 'C:\\\\Program Files (x86)\\\\Worksoft\\\\...', etc. — be specific\n"
-            "- Write as if guiding someone at their desk — conversational, not manual-style\n\n"
-            "End with ONE closing sentence (e.g. 'Try step 1 first and let me know what you see!').\n\n"
-            "IMPORTANT: Source all steps from the Salesforce knowledge base entries below. "
-            "Do not invent fixes not supported by the entries. Fill gaps only with directly related Worksoft knowledge.\n\n"
-            f"=== SALESFORCE KNOWLEDGE BASE ENTRIES ===\n\n{knowledge_text}"
+            + "The following Salesforce resolved cases contain the fix for this issue. "
+            "Read them all, identify the pattern, and produce structured steps.\n\n"
+            + step_format
+            + "Source all steps from the knowledge base below. "
+            "Fill gaps only with directly relevant Worksoft expertise.\n\n"
+            f"=== SALESFORCE KNOWLEDGE BASE ===\n\n{knowledge_text}"
         )
-        # Store all knowledge for follow-ups (not just one case)
         st.session_state.sf_resolution   = knowledge_text[:3000]
         st.session_state.sf_case_context = ctx_summary
-        st.session_state.sf_steps        = []
-        st.session_state.sf_step_idx     = 0
-        st.session_state.chat_phase      = "resolving"
     else:
-        # ── Pure AI reasoning — no matching database entries ──
         system_prompt = (
             base_system
-            + "No exact match was found in the Salesforce knowledge base for this query. "
-            "Apply your Worksoft domain expertise directly.\n\n"
-            "STRICT RESPONSE FORMAT — follow this exactly:\n\n"
-            "Start with one short diagnosis line (plain language, no bold).\n\n"
-            "Then give NUMBERED STEPS, each on its own line with a blank line between them:\n"
-            "   1. **[Bold: exact action to take]** — [why this step fixes the problem]\n"
-            "   2. **[Bold: next exact action]** — [brief reason]\n"
-            "   3. **[Bold: next action]** — [brief reason]\n"
-            "   ...and so on.\n\n"
-            "RULES FOR STEPS:\n"
-            "- Every step MUST be on its own numbered line\n"
-            "- Never combine two actions into one step\n"
-            "- Never write a paragraph — each step is one action only\n"
-            "- Include exact paths, service names, config keys, and command values\n"
-            "- Write as if guiding someone at their desk\n\n"
-            "End with: '📸 Share a screenshot if this persists — "
-            "or use **🔺 Forward to L2** below to raise a ticket with the IT Admin team.'\n\n"
-            "If the issue is genuinely outside your knowledge, say so briefly and suggest forwarding to L2."
+            + "No Salesforce case matched this query exactly. "
+            "Use your Worksoft domain expertise to produce structured fix steps.\n\n"
+            + step_format
         )
         st.session_state.sf_resolution   = ""
         st.session_state.sf_case_context = query
-        st.session_state.chat_phase      = "resolving"
 
-    reply = _ask_ai(
+    st.session_state.chat_phase = "resolving"
+
+    # Generate ALL steps (non-streaming — we'll drip them one at a time)
+    full_answer = _ask_ai(
         system_prompt=system_prompt,
         user_prompt=f"User's issue: {query}",
         history=history,
-        max_tokens=1500,
-        stream=True,
+        max_tokens=1200,
     )
 
-    if not reply and has_content:
-        # Hard fallback — AI unavailable, format raw knowledge
-        best     = matches[0]
-        raw      = (best.get("comments") or best.get("description") or "").strip()
-        reply    = f"Here's what the knowledge base says:\n\n{_format_case_content(raw)}\n\nLet me know if any step needs clarification!"
+    if not full_answer and has_content:
+        best = matches[0]
+        raw  = (best.get("comments") or best.get("description") or "").strip()
+        full_answer = _format_case_content(raw)
 
-    return reply or (
-        "I couldn't find a match or generate an answer right now. "
-        "Hit **❌ Still need help** to raise a ticket and the team will look into it."
-    )
+    if not full_answer:
+        return (
+            "I couldn't find a match or generate an answer right now. "
+            "Use **🔺 Forward to L2** below to raise a ticket with the team."
+        )
+
+    # ── Parse into diagnosis + step list ─────────────────────
+    diagnosis, steps = _parse_steps(full_answer)
+
+    if not steps:
+        # AI didn't follow the numbered format — return as-is
+        st.session_state.sf_steps    = []
+        st.session_state.sf_step_idx = 0
+        return full_answer
+
+    # Store all steps; we'll serve them one by one
+    st.session_state.sf_steps    = steps
+    st.session_state.sf_step_idx = 0
+    st.session_state.sf_diagnosis = diagnosis
+    total = len(steps)
+
+    # ── Serve Step 1 only ─────────────────────────────────────
+    intro = f"{diagnosis}\n\n" if diagnosis else ""
+    if total == 1:
+        return (
+            f"{intro}"
+            f"Here's what to try:\n\n"
+            f"1. {steps[0]}\n\n"
+            f"Give that a go and let me know how it goes! 👇"
+        )
+    else:
+        return (
+            f"{intro}"
+            f"I've got **{total} steps** for this — let's go one at a time so we don't miss anything.\n\n"
+            f"**Step 1 of {total}:**\n\n"
+            f"1. {steps[0]}\n\n"
+            f"Try that and reply when you're done — I'll give you Step 2! 👇"
+        )
 
 
 # ═══════════════════════════════════════════════════════════

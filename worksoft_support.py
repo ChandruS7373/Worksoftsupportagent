@@ -1989,6 +1989,11 @@ def render_escalated():
   </div>
 </div>""", unsafe_allow_html=True)
 
+    if st.button("← Back to Chat", key="esc_back"):
+        st.session_state.page = "chat"
+        st.session_state.show_resolution_popup = False
+        st.rerun()
+
     with st.form("esc_form"):
         c1, c2 = st.columns(2)
         with c1:

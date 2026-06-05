@@ -335,6 +335,8 @@ def _init_state():
         "initial_issue":           "",
         "resolution_check_shown":  False,
         "show_resolution_popup":   False,
+        "popup_reason":            "resolved",
+        "help_count":              0,
         "chat_started":            False,
         "sf_diagnosis":            "",
     }
@@ -1008,6 +1010,58 @@ def _reset_chat_state():
     st.session_state.initial_issue          = ""
     st.session_state.resolution_check_shown = False
     st.session_state.show_resolution_popup  = False
+    st.session_state.popup_reason           = "resolved"
+    st.session_state.help_count             = 0
+
+
+def _ai_detects_resolution(history: list) -> bool:
+    """Fast AI call: did the user's latest message indicate the issue is fixed?"""
+    last_user = next(
+        (m["content"] for m in reversed(history) if m.get("role") == "user"), ""
+    )
+    if not last_user or len(last_user.strip()) < 3:
+        return False
+    verdict = _ask_ai(
+        system_prompt=(
+            "You are reviewing a single support chat message. "
+            "Answer with exactly one word — YES or NO:\n"
+            "YES — the user is saying their issue is now fixed / resolved / working / sorted\n"
+            "NO  — they are still having the problem, asking a question, or describing a failure\n"
+            "One word only."
+        ),
+        user_prompt=f"User message: {last_user[:300]}",
+        max_tokens=3,
+        fast=True,
+    )
+    return verdict.strip().upper().startswith("YES")
+
+
+def _ai_feels_stuck(history: list) -> bool:
+    """
+    Fast AI call: read the last few messages and decide if the conversation
+    is stuck (same problem persisting, repeated failures) vs progressing.
+    Returns True if stuck.
+    """
+    recent = [m for m in history[-8:] if m.get("role") in ("user", "assistant")]
+    if not recent:
+        return False
+    convo_text = "\n".join(
+        f"{m['role'].title()}: {m['content'][:300]}" for m in recent
+    )
+    verdict = _ask_ai(
+        system_prompt=(
+            "You are reviewing a Worksoft IT support chat. "
+            "Read the conversation and respond with exactly one word:\n"
+            "STUCK — the user's issue is not being resolved "
+            "(same error keeps happening, steps not working, going in circles, no progress)\n"
+            "PROGRESSING — things are moving forward and a fix seems likely\n"
+            "One word only. No explanation."
+        ),
+        user_prompt=f"Conversation so far:\n{convo_text}",
+        max_tokens=5,
+        fast=True,
+    )
+    return verdict.strip().upper().startswith("STUCK")
 
 
 def _parse_steps(text: str) -> tuple:
@@ -1483,7 +1537,7 @@ def _retrieve_best_cases(query: str, top_n: int = 1) -> list:
 
 
 # ═══════════════════════════════════════════════════════════
-# CHAT ENGINE  (conversational, step-by-step)
+# CHAT ENGINE  — fully generative AI, Salesforce knowledge source
 # ═══════════════════════════════════════════════════════════
 def process_chat(text: str, history: list, file_data: dict = None) -> str:
     if file_data and file_data["type"] == "image":
@@ -1500,104 +1554,59 @@ def process_chat(text: str, history: list, file_data: dict = None) -> str:
         return _ask_ai(
             system_prompt=(
                 f"{_EXPERT_PERSONA} The user just greeted you. "
-                "Say hi warmly, mention you're their Worksoft support assistant powered by Salesforce knowledge, "
-                "and ask what they're running into. One or two sentences max."
+                "Say hi warmly in 1-2 sentences. Mention you're their Worksoft AI support assistant "
+                "and that your answers come from real Salesforce resolved cases. "
+                "Ask what they're running into."
             ),
             user_prompt=f"User said: '{text}'",
             history=history,
             max_tokens=100,
             fast=True,
-        ) or "Hey! I'm your Worksoft support assistant. What's going on today?"
+        ) or "Hey! I'm your Worksoft AI support assistant — my answers come from real Salesforce cases. What's going on today?"
 
-    # ── RESOLVING PHASE — fully AI-driven ────────────────────
+    # ── RESOLVING PHASE — streaming AI follow-up ──────────────
     if phase == "resolving":
-        sf_steps = st.session_state.get("sf_steps", [])
-        step_idx = st.session_state.get("sf_step_idx", 0)
-        total    = len(sf_steps)
         sf_res   = st.session_state.get("sf_resolution", "")
         case_ctx = st.session_state.get("sf_case_context", "")
 
-        # Build step state for the AI to reason about
-        if sf_steps:
-            given_lines   = "\n".join(
-                f"  ✓ Step {i+1}: {sf_steps[i]}" for i in range(step_idx + 1)
-            )
-            pending_lines = "\n".join(
-                f"  • Step {i+1}: {sf_steps[i]}" for i in range(step_idx + 1, total)
-            ) or "  (none — all steps have been given)"
-            step_state = (
-                f"STEP PROGRESS ({step_idx + 1} of {total} given):\n"
-                f"Steps already given to user:\n{given_lines}\n\n"
-                f"Steps NOT yet given (do NOT reveal all at once):\n{pending_lines}\n\n"
-                f"Last step given: Step {step_idx + 1} — {sf_steps[step_idx] if step_idx < total else 'all done'}\n"
-            )
-        else:
-            step_state = "No structured step list — answer freely using your knowledge.\n"
-
-        system_prompt = (
-            f"{_EXPERT_PERSONA}\n\n"
-            f"{_WORKSOFT_DOMAIN}\n\n"
-            + (f"Salesforce knowledge base:\n{sf_res[:1800]}\n\n" if sf_res else "")
-            + (f"Issue context: {case_ctx}\n\n" if case_ctx else "")
-            + step_state
-            + """
-You are having a live chat support session. The user just replied to you.
-Read their message carefully — understand what they actually mean — then decide:
-
-DECISION RULES (think, don't keyword-match):
-• Did the user say a step worked, say "done", ask to move on, or confirm they're ready?
-  → They want the NEXT step.
-• Did the user say something failed, describe an error, ask "why", or need help?
-  → They need help with the CURRENT step — answer and stay on it.
-• Did the user say the whole issue is fixed, say "thanks / all good / sorted"?
-  → The problem is resolved — confirm and close.
-
-RESPONSE FORMAT — your reply MUST start with exactly one of these tokens on its own line:
-[NEXT] — you're advancing to the next step
-[DONE] — the issue is fully resolved
-[HELP] — you're assisting with the current step (question, failure, clarification)
-
-Then a blank line. Then your actual reply to the user.
-
-RULES FOR EACH TOKEN:
-[NEXT] → Give ONLY the next pending step. Say "Step X of Y:" before it.
-          End with "Let me know when that's done! 👇"
-          If this IS the final step, end with "Let me know if that sorted it!"
-[DONE] → 1 warm sentence. Tell them to click ✅ Resolved at L1 below.
-[HELP] → 2-3 sentences MAX. Answer their specific question or diagnose the failure.
-          End with a short question ("What do you see?", "Does that help?").
-
-NEVER give more than one step at a time.
-NEVER use keyword lists — actually understand what the user is saying.
-Sound like a knowledgeable colleague, not a support script.
-"""
-        )
-
-        raw = _ask_ai(
-            system_prompt=system_prompt,
+        reply = _ask_ai(
+            system_prompt=(
+                f"{_EXPERT_PERSONA}\n\n"
+                f"{_WORKSOFT_DOMAIN}\n\n"
+                + (f"Salesforce knowledge base (resolved cases for this issue):\n{sf_res[:2000]}\n\n" if sf_res else "")
+                + (f"Issue context: {case_ctx}\n\n" if case_ctx else "")
+                + "You are in a live support chat. The user just replied.\n"
+                "Read their message and respond naturally:\n"
+                "- If they completed a step and want the next one → give the next relevant action clearly\n"
+                "- If a step failed or they hit an error → diagnose why in 2-3 sentences and tell them what to try\n"
+                "- If they have a question → answer it simply and conversationally\n"
+                "- If they say it's fixed / working → celebrate briefly and tell them to click ✅ Resolved at L1\n\n"
+                "Keep it SHORT and conversational — 2-4 sentences or one focused step. "
+                "This is a back-and-forth chat, not a document. "
+                "Use the Salesforce knowledge above as your source. "
+                "End every reply with a short question or prompt like 'What do you see?' or 'Let me know how that goes!'"
+            ),
             user_prompt=text,
             history=history,
-            max_tokens=350,
-        )
+            max_tokens=400,
+            stream=True,
+        ) or "What exactly are you seeing right now? Tell me more and I'll help you figure it out."
 
-        if not raw:
-            return "What exactly are you seeing? Tell me more and I'll help you figure it out."
+        # ── Resolution detection (fast AI call, not keyword matching) ──
+        if not st.session_state.get("show_resolution_popup") and not st.session_state.get("resolution_check_shown"):
+            if _ai_detects_resolution(history):
+                st.session_state.show_resolution_popup = True
+                st.session_state.popup_reason = "resolved"
+            else:
+                # Stuck check after 4+ exchanges
+                user_msg_count = sum(1 for m in history if m.get("role") == "user")
+                st.session_state.help_count = st.session_state.get("help_count", 0) + 1
+                if user_msg_count >= 4 and (st.session_state.help_count >= 2 or user_msg_count >= 5):
+                    if _ai_feels_stuck(history):
+                        st.session_state.show_resolution_popup = True
+                        st.session_state.popup_reason = "stuck"
 
-        # Parse the AI's decision token
-        lines   = raw.strip().split("\n")
-        token   = lines[0].strip()
-        content = "\n".join(lines[1:]).strip() if len(lines) > 1 else raw.strip()
-
-        if token == "[NEXT]":
-            new_idx = step_idx + 1
-            if new_idx < total:
-                st.session_state.sf_step_idx = new_idx
-        elif token == "[DONE]":
-            st.session_state.show_resolution_popup = True
-            _reset_chat_state()
-        # [HELP] — no state change, stay on current step
-
-        return content or raw
+        return reply
 
     # ── INTAKE PHASE — user answered the clarifying question ──
     if phase == "intake":
@@ -1606,35 +1615,33 @@ Sound like a knowledgeable colleague, not a support script.
         _reset_chat_state()
         return _resolve(full_query, history)
 
-    # ── IDLE — first message on this issue ────────────────────
+    # ── IDLE — first real message ──────────────────────────────
     if file_data:
         _reset_chat_state()
         return _resolve(query, history)
 
-    # Store issue, ask ONE clarifying question, then wait for answer
+    # Ask ONE clarifying question before searching Salesforce
     st.session_state.initial_issue = text
     st.session_state.chat_phase    = "intake"
 
     return _ask_ai(
         system_prompt=(
             f"{_EXPERT_PERSONA}\n\n"
-            "The user just described a Worksoft issue. Ask ONE short, targeted question to narrow it down.\n\n"
-            "Choose the most useful question from:\n"
+            "The user just described a Worksoft issue. "
+            "Ask ONE short, targeted question to help narrow it down before searching.\n\n"
+            "Choose the most useful from:\n"
             "- Which module — CTM, Certify, Portal, or Capture?\n"
             "- What's the exact error message or code?\n"
             "- Is this on all machines or just one?\n"
             "- Did anything change recently (update, restart, config change)?\n"
-            "- Is this new, or was it working before?\n\n"
-            "Rules:\n"
-            "- One sentence only. Conversational, not formal.\n"
-            "- Vary your opener — don't always say 'Got it!'\n"
-            "- Show you understood the issue before asking."
+            "- Is this new or was it working before?\n\n"
+            "One sentence only. Conversational. Show you understood the issue first."
         ),
         user_prompt=f"User's issue: {text}",
         history=history,
         max_tokens=120,
         fast=True,
-    ) or "Hmm, a few things could cause this — which Worksoft module are you in: CTM, Certify, or Portal?"
+    ) or "Got it — which Worksoft module are you in: CTM, Certify, Portal, or Capture?"
 
 
 def _build_case_knowledge(matches: list, query: str = "") -> tuple:
@@ -1674,108 +1681,68 @@ def _build_case_knowledge(matches: list, query: str = "") -> tuple:
 
 def _resolve(query: str, history: list) -> str:
     """
-    Retrieve Salesforce cases, generate ALL fix steps via AI (non-streaming),
-    then serve only Step 1 — the rest are served one-at-a-time as the user
-    confirms each step is done.
+    Pull matching Salesforce cases, feed them to the AI as knowledge,
+    and stream a conversational numbered-step answer directly to the UI.
     """
     matches = _retrieve_best_cases(query, top_n=5)
     knowledge_text, has_content, ctx_summary = (
         _build_case_knowledge(matches, query) if matches else ("", False, query)
     )
 
-    base_system = f"{_EXPERT_PERSONA}\n\n{_WORKSOFT_DOMAIN}\n\n"
-
-    step_format = (
-        "OUTPUT FORMAT — follow exactly:\n"
-        "Line 1: One plain-English diagnosis sentence (no bold, no bullet).\n"
-        "Blank line.\n"
-        "Then numbered steps, one per line:\n"
-        "1. **[exact action]** — [brief why it fixes the issue]\n"
-        "2. **[exact action]** — [brief why]\n"
-        "3. **[exact action]** — [brief why]\n"
-        "...and so on.\n\n"
-        "RULES:\n"
-        "- Each step = ONE action only. Never combine two actions.\n"
-        "- Include exact service names, file paths, config keys (e.g. services.msc, "
-        "C:\\\\Program Files (x86)\\\\Worksoft\\\\CTM Agent Manager\\\\appsettings.config).\n"
-        "- No closing sentence. Steps only.\n"
-    )
-
     if has_content:
-        system_prompt = (
-            base_system
-            + "The following Salesforce resolved cases contain the fix for this issue. "
-            "Read them all, identify the pattern, and produce structured steps.\n\n"
-            + step_format
-            + "Source all steps from the knowledge base below. "
-            "Fill gaps only with directly relevant Worksoft expertise.\n\n"
-            f"=== SALESFORCE KNOWLEDGE BASE ===\n\n{knowledge_text}"
+        knowledge_section = (
+            "The following are real resolved cases from our Salesforce knowledge base. "
+            "Use them as your primary source for the fix steps.\n\n"
+            f"=== SALESFORCE KNOWLEDGE BASE ===\n\n{knowledge_text}\n\n"
+            "=== END OF KNOWLEDGE BASE ===\n\n"
         )
         st.session_state.sf_resolution   = knowledge_text[:3000]
         st.session_state.sf_case_context = ctx_summary
     else:
-        system_prompt = (
-            base_system
-            + "No Salesforce case matched this query exactly. "
-            "Use your Worksoft domain expertise to produce structured fix steps.\n\n"
-            + step_format
+        knowledge_section = (
+            "No exact Salesforce case was found for this query. "
+            "Use your deep Worksoft domain expertise to answer.\n\n"
         )
         st.session_state.sf_resolution   = ""
         st.session_state.sf_case_context = query
 
     st.session_state.chat_phase = "resolving"
 
-    # Generate ALL steps (non-streaming — we'll drip them one at a time)
-    full_answer = _ask_ai(
+    system_prompt = (
+        f"{_EXPERT_PERSONA}\n\n"
+        f"{_WORKSOFT_DOMAIN}\n\n"
+        + knowledge_section
+        + "Answer the user's issue conversationally with numbered steps.\n\n"
+        "FORMAT:\n"
+        "- Start with one plain sentence diagnosing the likely cause.\n"
+        "- Then give numbered fix steps:\n"
+        "    1. **[exact action]** — [brief reason why this helps]\n"
+        "    2. **[exact action]** — [brief reason]\n"
+        "    ...and so on. Each step = ONE action only.\n"
+        "- Include exact service names, file paths, config keys where relevant.\n"
+        "- End with: 'Start with Step 1 and let me know what happens — we'll go from there! 👇'\n\n"
+        "Source your steps from the Salesforce knowledge base above. "
+        "Fill gaps with your Worksoft expertise. "
+        "Sound like a knowledgeable colleague, not a manual."
+    )
+
+    reply = _ask_ai(
         system_prompt=system_prompt,
         user_prompt=f"User's issue: {query}",
         history=history,
-        max_tokens=1200,
+        max_tokens=900,
+        stream=True,
     )
 
-    if not full_answer and has_content:
+    if not reply and has_content:
         best = matches[0]
         raw  = (best.get("comments") or best.get("description") or "").strip()
-        full_answer = _format_case_content(raw)
+        reply = _format_case_content(raw)
 
-    if not full_answer:
-        return (
-            "I couldn't find a match or generate an answer right now. "
-            "Use **🔺 Forward to L2** below to raise a ticket with the team."
-        )
-
-    # ── Parse into diagnosis + step list ─────────────────────
-    diagnosis, steps = _parse_steps(full_answer)
-
-    if not steps:
-        # AI didn't follow the numbered format — return as-is
-        st.session_state.sf_steps    = []
-        st.session_state.sf_step_idx = 0
-        return full_answer
-
-    # Store all steps; we'll serve them one by one
-    st.session_state.sf_steps    = steps
-    st.session_state.sf_step_idx = 0
-    st.session_state.sf_diagnosis = diagnosis
-    total = len(steps)
-
-    # ── Serve Step 1 only ─────────────────────────────────────
-    intro = f"{diagnosis}\n\n" if diagnosis else ""
-    if total == 1:
-        return (
-            f"{intro}"
-            f"Here's what to try:\n\n"
-            f"1. {steps[0]}\n\n"
-            f"Give that a go and let me know how it goes! 👇"
-        )
-    else:
-        return (
-            f"{intro}"
-            f"I've got **{total} steps** for this — let's go one at a time so we don't miss anything.\n\n"
-            f"**Step 1 of {total}:**\n\n"
-            f"1. {steps[0]}\n\n"
-            f"Try that and reply when you're done — I'll give you Step 2! 👇"
-        )
+    return reply or (
+        "I couldn't generate an answer right now. "
+        "Use **🔺 Forward to L2** below to raise a ticket with the team."
+    )
 
 
 # ═══════════════════════════════════════════════════════════
@@ -1862,39 +1829,62 @@ def render_chat():
 
 @st.dialog("Support Level Check 🔔")
 def _show_resolution_dialog():
-    """Popup shown when AI detects the issue is resolved — asks L1 or L2."""
-    st.markdown("""
+    """Popup shown when AI detects resolution OR when conversation is stuck after 4-5 turns."""
+    reason = st.session_state.get("popup_reason", "resolved")
+
+    if reason == "stuck":
+        icon    = "⚠️"
+        heading = "This looks like it needs L2 support"
+        subtext = (
+            "We've tried a few steps but the issue doesn't seem to be resolving. "
+            "Would you like to escalate to the <strong>L2 specialist team</strong>, "
+            "or continue troubleshooting with AI?"
+        )
+    else:
+        icon    = "🔍"
+        heading = "Can we close this at L1?"
+        subtext = (
+            "It looks like your issue may be sorted. "
+            "Confirm below — or keep chatting if you still need help."
+        )
+
+    st.markdown(f"""
 <div style="text-align:center;padding:6px 0 18px;">
-  <div style="font-size:52px;margin-bottom:12px;">🔍</div>
+  <div style="font-size:52px;margin-bottom:12px;">{icon}</div>
   <div style="font-size:18px;font-weight:800;color:#0f172a;margin-bottom:8px;">
-    Can we close this at L1?
+    {heading}
   </div>
   <div style="font-size:13px;color:#64748b;line-height:1.7;">
-    It looks like your issue may be resolved.<br>
-    Confirm below — or keep chatting if you need more help.
+    {subtext}
   </div>
 </div>
 """, unsafe_allow_html=True)
 
+    # For stuck conversations, swap button prominence (L2 is the recommended action)
+    is_stuck = (st.session_state.get("popup_reason") == "stuck")
     btn_col1, btn_col2 = st.columns(2)
     with btn_col1:
-        if st.button("✅  Resolved at L1", use_container_width=True, type="primary"):
+        l1_type = "secondary" if is_stuck else "primary"
+        if st.button("✅  Resolved at L1", use_container_width=True, type=l1_type):
             st.session_state.resolution_check_shown = True
             st.session_state.show_resolution_popup  = False
             st.session_state.page = "resolved"
             st.rerun(scope="app")
     with btn_col2:
-        if st.button("🔺  Forward to L2", use_container_width=True):
+        l2_type = "primary" if is_stuck else "secondary"
+        if st.button("🔺  Forward to L2", use_container_width=True, type=l2_type):
             st.session_state.resolution_check_shown = True
             st.session_state.show_resolution_popup  = False
             st.session_state.page = "escalated"
             st.rerun(scope="app")
 
     st.markdown('<div style="margin-top:8px;"></div>', unsafe_allow_html=True)
-    if st.button("💬  Not yet — keep chatting", use_container_width=True):
-        # Dismiss popup, let user continue without re-popping unless AI detects resolution again
+    keep_label = "💬  Keep chatting with AI" if is_stuck else "💬  Not yet — keep chatting"
+    if st.button(keep_label, use_container_width=True):
+        # Dismiss this popup instance; AI can trigger it again later if still stuck
         st.session_state.resolution_check_shown = False
         st.session_state.show_resolution_popup  = False
+        st.session_state.help_count             = 0   # reset counter so it re-evaluates fresh
         st.rerun()
 
 

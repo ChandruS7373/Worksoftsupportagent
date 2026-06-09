@@ -720,15 +720,15 @@ _CLAUDE_MODEL      = "claude-sonnet-4-6"
 _CLAUDE_FAST_MODEL = "claude-haiku-4-5-20251001"
 
 
-@st.cache_data(ttl=45, show_spinner=False)
+@st.cache_data(ttl=300, show_spinner=False)
 def _cached_case_subjects():
-    """Case subjects list — cached 45 s so repeated chat turns skip the DB query."""
+    """Case subjects list — cached 300 s so the same case list is used within a session."""
     return support_db.get_all_case_subjects()
 
 
-@st.cache_data(ttl=45, show_spinner=False)
+@st.cache_data(ttl=300, show_spinner=False)
 def _cached_case_pool():
-    """Case pool with snippets — cached 45 s."""
+    """Case pool with snippets — cached 300 s."""
     return support_db.get_case_pool(limit=150)
 
 
@@ -826,19 +826,24 @@ def _groq_client():
 def _ask_groq(
     system_prompt: str,
     user_prompt:   str,
-    max_tokens:    int  = 800,
-    history:       list = None,
-    fast:          bool = False,
-    stream:        bool = False,
+    max_tokens:    int   = 800,
+    history:       list  = None,
+    fast:          bool  = False,
+    stream:        bool  = False,
+    temperature:   float = 0.3,
 ) -> str:
     """
     Groq LLM call — primary AI engine.
-    stream=True → streams token-by-token into st.session_state['_stream_slot'].
-    fast=True   → uses the smaller/faster model (for 1-word classifiers, greetings).
+    stream=True    → streams token-by-token into st.session_state['_stream_slot'].
+    fast=True      → uses the smaller/faster model (for 1-word classifiers, greetings).
+    temperature    → 0.0 for deterministic classification/retrieval, 0.3 for chat responses.
     Falls back to Claude then OpenAI if GROQ_API_KEY is not set.
     """
     if not GROQ_API_KEY:
-        return _ask_claude_fallback(system_prompt, user_prompt, max_tokens, history, fast, stream)
+        return _ask_claude_fallback(system_prompt, user_prompt, max_tokens, history, fast, stream, temperature)
+
+    # Classification calls (fast=True) must be fully deterministic
+    effective_temp = 0.0 if fast else temperature
 
     try:
         client = _groq_client()
@@ -864,7 +869,7 @@ def _ask_groq(
             full       = ""
             completion = client.chat.completions.create(
                 model=model, messages=messages,
-                max_tokens=max_tokens, temperature=0.7, stream=True,
+                max_tokens=max_tokens, temperature=effective_temp, stream=True,
             )
             for chunk in completion:
                 delta = chunk.choices[0].delta.content or ""
@@ -880,25 +885,27 @@ def _ask_groq(
 
         completion = client.chat.completions.create(
             model=model, messages=messages,
-            max_tokens=max_tokens, temperature=0.7,
+            max_tokens=max_tokens, temperature=effective_temp,
         )
         return (completion.choices[0].message.content or "").strip()
     except Exception as e:
         import traceback
         print(f"[Groq error] {e}\n{traceback.format_exc()}")
-        return _ask_claude_fallback(system_prompt, user_prompt, max_tokens, history, fast, stream)
+        return _ask_claude_fallback(system_prompt, user_prompt, max_tokens, history, fast, stream, temperature)
 
 
 def _ask_ai(system_prompt: str, user_prompt: str, max_tokens: int = 800,
-            history: list = None, fast: bool = False, stream: bool = False) -> str:
+            history: list = None, fast: bool = False, stream: bool = False,
+            temperature: float = 0.3) -> str:
     """Single entry-point for all AI calls — routes through Groq."""
-    return _ask_groq(system_prompt, user_prompt, max_tokens, history, fast, stream)
+    return _ask_groq(system_prompt, user_prompt, max_tokens, history, fast, stream, temperature)
 
 
-def _ask_claude_fallback(system_prompt, user_prompt, max_tokens, history, fast, stream):
+def _ask_claude_fallback(system_prompt, user_prompt, max_tokens, history, fast, stream, temperature=0.3):
     """Claude fallback when Groq key is not configured."""
     if not ANTHROPIC_API_KEY:
         return _ask_openai_fallback(system_prompt, user_prompt, max_tokens, history, fast)
+    effective_temp = 0.0 if fast else temperature
     try:
         import anthropic
         client   = anthropic.Anthropic(api_key=ANTHROPIC_API_KEY)
@@ -923,7 +930,7 @@ def _ask_claude_fallback(system_prompt, user_prompt, max_tokens, history, fast, 
             if full: stream_slot.markdown(full)
             return full
         r = client.messages.create(model=model, system=system_prompt,
-                                   messages=msgs, max_tokens=max_tokens, temperature=0.45)
+                                   messages=msgs, max_tokens=max_tokens, temperature=effective_temp)
         return (r.content[0].text or "") if r.content else ""
     except Exception as e:
         import traceback
@@ -1514,6 +1521,7 @@ def _retrieve_best_cases(query: str, top_n: int = 1) -> list:
         user_prompt=f"User question: {query}\n\nCases:\n" + "\n".join(sub_lines),
         max_tokens=80,
         stream=False,
+        temperature=0.0,
     )
 
     candidate_ids: list = []
@@ -1525,8 +1533,8 @@ def _retrieve_best_cases(query: str, top_n: int = 1) -> list:
                 if cid not in candidate_ids:
                     candidate_ids.append(cid)
 
-    # Merge keyword-search hits (returns up to 5, improved SQL LIKE matching)
-    kw_hits = support_db.search_knowledge(query, top_n=8)
+    # Merge keyword-search hits — larger pool gives retrieval more chances to find the right case
+    kw_hits = support_db.search_knowledge(query, top_n=12)
     for m in kw_hits:
         cid = m["sf_case_id"]
         if cid not in candidate_ids:
@@ -1566,6 +1574,7 @@ def _retrieve_best_cases(query: str, top_n: int = 1) -> list:
         ),
         max_tokens=30,
         stream=False,
+        temperature=0.0,
     )
 
     if s2_resp and re.sub(r"[^a-zA-Z]", "", s2_resp).upper() != "NONE":
@@ -1676,6 +1685,7 @@ CONVERSATION STYLE:
 You are a smart, conversational AI support assistant for Worksoft products at Qualesce.
 You can answer ANY question the user asks.
 Your PRIMARY knowledge source is the Salesforce resolved cases above — always use them when available.
+When Salesforce case data is present, follow those resolution steps exactly — do not substitute, skip, or invent alternative steps.
 For questions outside Worksoft, answer naturally from your general knowledge.
 {conversation_style}"""
     )

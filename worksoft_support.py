@@ -2342,6 +2342,17 @@ html,body,[data-testid="stAppViewContainer"]{background:#f3f4f6!important;}
 }
 .stFormSubmitButton>button:hover{background:#1f2937!important;transform:none!important;}
 
+/* ── Sync Salesforce button ── */
+[data-testid="stBaseButton-secondary"]{
+  border-radius:8px!important;height:40px!important;
+  font-size:13px!important;font-weight:600!important;
+  background:#f9fafb!important;color:#374151!important;
+  border:1.5px solid #d1d5db!important;letter-spacing:.1px!important;
+}
+[data-testid="stBaseButton-secondary"]:hover{
+  background:#f3f4f6!important;border-color:#9ca3af!important;
+}
+
 /* Form field labels */
 .stTextInput label{font-size:13px!important;font-weight:600!important;color:#374151!important;}
 .stTextInput>div>div>input{
@@ -2421,6 +2432,22 @@ html,body,[data-testid="stAppViewContainer"]{background:#f3f4f6!important;}
 
         st.markdown('<div class="ir-footer">Your details are used only to personalise<br>support and attach to any ticket raised.</div>',
                     unsafe_allow_html=True)
+
+        st.markdown('<div style="height:18px;"></div>', unsafe_allow_html=True)
+        st.markdown('<hr style="border:none;border-top:1px solid #e5e7eb;margin:0;">', unsafe_allow_html=True)
+        st.markdown('<div style="height:12px;"></div>', unsafe_allow_html=True)
+        sync_clicked = st.button("🔄  Sync Salesforce", key="intro_sync_sf", use_container_width=True)
+
+    # ── Handle sync (must be outside columns so spinner renders full-width) ──
+    if sync_clicked:
+        with st.spinner("Syncing knowledge base from Salesforce…"):
+            ok, msg = sync_sf_knowledge()
+        if ok:
+            _cached_case_subjects.clear()
+            st.success(f"✅ {msg}")
+            st.rerun()
+        else:
+            st.error(f"❌ {msg}")
 
     # ── Handle submit (outside columns — variables still in scope) ──
     if submitted:

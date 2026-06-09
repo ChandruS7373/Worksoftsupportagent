@@ -49,304 +49,163 @@ IT_ADMIN_EMAIL    = _secret("IT_ADMIN_EMAIL", "it-admin@qualesce.com")
 PORTAL_URL        = SF_INSTANCE_URL or f"https://{SF_DOMAIN}.salesforce.com"
 
 st.set_page_config(
-    page_title="Worksoft Support | Qualesce",
+    page_title="AI Support Assistant",
     page_icon="🤖",
-    layout="centered",
-    initial_sidebar_state="expanded",
+    layout="wide",
+    initial_sidebar_state="collapsed",
 )
+# Note: layout stays "wide" — we control width via .block-container CSS per page
 
 # ═══════════════════════════════════════════════════════════
 # CSS
 # ═══════════════════════════════════════════════════════════
 st.markdown("""
 <style>
-/* ── RESET & BASE ── */
-*{box-sizing:border-box;margin:0;padding:0;}
-html,body,[data-testid="stAppViewContainer"]{
-  background:#f5f5f5!important;
-  min-height:100vh;
-  font-family:-apple-system,BlinkMacSystemFont,'Segoe UI','Inter',sans-serif!important;
-}
-header,#MainMenu,footer,.stDeployButton{display:none!important;}
+/* ── RESET (all pages) ── */
+[data-testid="stHeader"]{display:none!important;}
 [data-testid="stSidebar"]{display:none!important;}
+header,#MainMenu,footer,.stDeployButton{display:none!important;}
 [data-testid="stMain"]>div{padding-top:0!important;}
-.block-container{max-width:100%!important;padding:10px 16px 0!important;}
+html,body,[data-testid="stAppViewContainer"]{
+  font-family:-apple-system,BlinkMacSystemFont,'Segoe UI',Roboto,sans-serif!important;
+  background:#f0f0f5!important;
+}
 
-/* ── NAVBAR ── */
-.nav{
-  height:56px;background:#ffffff;
-  border-bottom:1px solid #e5e7eb;
+/* ── CHAT NAVBAR ── */
+.chat-navbar{
+  background:#fff;border-bottom:1px solid #e5e7eb;
+  box-shadow:0 1px 6px rgba(0,0,0,.07);
   display:flex;align-items:center;justify-content:space-between;
-  padding:0 20px;margin-bottom:12px;border-radius:12px;
-  box-shadow:0 1px 4px rgba(0,0,0,.06);
+  padding:0 24px;height:62px;
+  position:sticky;top:0;z-index:9000;
 }
-.nav-left{display:flex;align-items:center;gap:12px;}
-.nav-logo{
-  width:36px;height:36px;border-radius:10px;flex-shrink:0;
-  background:linear-gradient(135deg,#2563eb,#3b82f6);
-  display:flex;align-items:center;justify-content:center;
-  font-size:18px;
-}
-.nav-title{font-size:14px;font-weight:700;color:#111827;letter-spacing:-.2px;}
-.nav-sub{font-size:11px;color:#9ca3af;margin-top:1px;}
-.nav-right{display:flex;align-items:center;gap:8px;}
-.nav-pill{
-  font-size:11px;font-weight:600;padding:5px 14px;border-radius:99px;
-  background:#eff6ff;color:#2563eb;border:1px solid #bfdbfe;
-  letter-spacing:.2px;
-}
-.nav-divider{width:1px;height:20px;background:#e5e7eb;}
+.cn-brand{display:flex;align-items:center;gap:10px;}
+.cn-icon{width:34px;height:34px;border-radius:9px;flex-shrink:0;
+  background:linear-gradient(135deg,#534AB7,#7F77DD);
+  display:flex;align-items:center;justify-content:center;font-size:18px;}
+.cn-title{font-size:15px;font-weight:600;color:#111827;}
+.cn-portal{font-size:13px;color:#6b7280;}
+.cn-user-wrap{display:flex;align-items:center;gap:10px;}
+.cn-user-text{text-align:right;line-height:1.3;}
+.cn-user-name{font-size:13px;font-weight:600;color:#111827;display:block;}
+.cn-user-co{font-size:11px;color:#9ca3af;display:block;}
+.cn-avatar{width:34px;height:34px;border-radius:50%;flex-shrink:0;
+  background:#6c63d5;color:#fff;
+  display:flex;align-items:center;justify-content:center;font-size:11px;font-weight:700;}
+.cn-dots{font-size:20px;color:#9ca3af;cursor:pointer;letter-spacing:-1px;}
 
-/* ── LEFT PANEL (ChatPDF sidebar style) ── */
-.lp{
-  background:#111827;
-  border-radius:16px;
-  padding:20px 16px;display:flex;flex-direction:column;gap:14px;
-  min-height:calc(100vh - 100px);
-  box-shadow:0 4px 20px rgba(0,0,0,.18);
-}
-.lp-logo{display:flex;align-items:center;gap:11px;
-  padding-bottom:16px;border-bottom:1px solid rgba(255,255,255,.07);}
-.lp-av{width:40px;height:40px;border-radius:10px;flex-shrink:0;
-  background:linear-gradient(135deg,#2563eb,#3b82f6);
-  display:flex;align-items:center;justify-content:center;font-size:20px;}
-.lp-t{font-size:13px;font-weight:700;color:#f9fafb;}
-.lp-s{font-size:10px;color:#6b7280;margin-top:2px;}
-.lp-status{
-  display:inline-flex;align-items:center;gap:5px;
-  background:rgba(34,197,94,.1);border:1px solid rgba(34,197,94,.2);
-  color:#4ade80;font-size:10px;font-weight:600;
-  padding:4px 10px;border-radius:99px;text-transform:uppercase;letter-spacing:.4px;
-  width:fit-content;
-}
-.lp-dot{width:5px;height:5px;border-radius:50%;background:#22c55e;
-  animation:pulse 1.8s infinite;}
-@keyframes pulse{0%,100%{opacity:1;transform:scale(1)}50%{opacity:.35;transform:scale(1.5)}}
-.lp-sec-title{font-size:9px;font-weight:600;color:#4b5563;
-  text-transform:uppercase;letter-spacing:.9px;margin-bottom:5px;}
-.lp-stat{
-  background:rgba(255,255,255,.04);
-  border:1px solid rgba(255,255,255,.07);
-  border-radius:10px;padding:12px 14px;
-}
-.lp-num{font-size:26px;font-weight:800;color:#f3f4f6;line-height:1;}
-.lp-numlbl{font-size:10px;color:#6b7280;margin-top:3px;}
-.lp-feature{
-  display:flex;align-items:center;gap:9px;padding:6px 0;
-  border-bottom:1px solid rgba(255,255,255,.05);font-size:11.5px;color:#9ca3af;
-}
-.lp-feature:last-child{border-bottom:none;}
-.lp-feat-icon{
-  width:24px;height:24px;border-radius:6px;flex-shrink:0;
-  background:rgba(37,99,235,.15);
-  display:flex;align-items:center;justify-content:center;font-size:12px;
-}
+/* ── CHAT MESSAGES ── */
+@keyframes msgIn{from{opacity:0;transform:translateY(10px)}to{opacity:1;transform:none}}
+@keyframes typingBounce{0%,60%,100%{transform:translateY(0);opacity:.4}30%{transform:translateY(-5px);opacity:1}}
+.chat-msgs{padding:12px 0 10px;display:flex;flex-direction:column;gap:12px;max-width:860px;margin:0 auto;}
+.date-stamp{text-align:center;font-size:11px;color:#9ca3af;margin-bottom:2px;}
+.msg-row{display:flex;gap:10px;align-items:flex-end;}
+.msg-row.user{flex-direction:row-reverse;}
+.msg-row.new{animation:msgIn .28s ease both;}
+.msg-av{width:28px;height:28px;border-radius:50%;flex-shrink:0;
+  display:flex;align-items:center;justify-content:center;font-size:13px;}
+.msg-av.bot{background:#ede9fe;border:1px solid #ddd6fe;font-size:14px;}
+.msg-av.user{background:#6c63d5;color:#fff;font-size:10px;font-weight:700;}
+.bubble{padding:10px 14px;font-size:13.5px;line-height:1.6;max-width:72%;word-break:break-word;
+  box-shadow:0 1px 4px rgba(0,0,0,.06);}
+.msg-row.assistant .bubble{background:#fff;border:1px solid #e9eaec;
+  border-radius:4px 18px 18px 18px;color:#111827;}
+.msg-row.user .bubble{background:linear-gradient(135deg,#534AB7,#6c63d5);
+  color:#fff;border-radius:18px 4px 18px 18px;box-shadow:0 2px 8px rgba(83,74,183,.3);}
+.bubble p{margin:0 0 4px;}.bubble p:last-child{margin-bottom:0;}
+.bubble ol,.bubble ul{margin:4px 0 4px 16px;padding:0;}
+.bubble li{margin:2px 0;}
+.bubble strong{font-weight:600;}
+/* ── TYPING INDICATOR ── */
+.typing-row{display:flex;gap:10px;align-items:flex-end;animation:msgIn .22s ease both;}
+.typing-av{width:28px;height:28px;border-radius:50%;background:#ede9fe;border:1px solid #ddd6fe;
+  flex-shrink:0;display:flex;align-items:center;justify-content:center;font-size:14px;}
+.typing-bubble{padding:10px 14px;background:#fff;border:1px solid #e9eaec;
+  border-radius:4px 18px 18px 18px;box-shadow:0 1px 4px rgba(0,0,0,.06);
+  display:flex;gap:4px;align-items:center;}
+.typing-dot{width:6px;height:6px;border-radius:50%;background:#a0aec0;
+  animation:typingBounce 1.2s infinite ease-in-out;}
+.typing-dot:nth-child(2){animation-delay:.2s;}
+.typing-dot:nth-child(3){animation-delay:.4s;}
 
-/* ── CHAT PANEL (ChatPDF main area) ── */
-.cwin{
-  background:#ffffff;border-radius:16px;
-  border:1px solid #e5e7eb;
-  box-shadow:0 2px 12px rgba(0,0,0,.06);
-  overflow:hidden;
-}
-.chead{
-  height:60px;display:flex;align-items:center;justify-content:space-between;
-  padding:0 20px;background:#ffffff;
-  border-bottom:1px solid #f3f4f6;
-}
-.chead-left{display:flex;align-items:center;gap:12px;}
-.chead-av{
-  width:38px;height:38px;border-radius:50%;flex-shrink:0;
-  background:linear-gradient(135deg,#2563eb,#3b82f6);
-  display:flex;align-items:center;justify-content:center;font-size:18px;
-}
-.chead-name{font-size:14px;font-weight:700;color:#111827;}
-.chead-sub{font-size:11px;color:#6b7280;margin-top:2px;}
-.chead-status{
-  display:inline-flex;align-items:center;gap:4px;
-  color:#16a34a;font-size:10px;font-weight:600;
-  margin-top:2px;
-}
-.chead-dot{width:6px;height:6px;border-radius:50%;background:#22c55e;
-  animation:pulse 1.8s infinite;}
-.chead-rt{text-align:right;}
-.chead-rt-lbl{font-size:9.5px;color:#9ca3af;text-transform:uppercase;letter-spacing:.4px;}
-.chead-rt-val{font-size:11.5px;font-weight:600;color:#374151;margin-top:2px;}
+/* ── FEEDBACK CARD ── */
+.fb-card{max-width:820px;margin:0 auto;background:#fff;border:1px solid #e5e7eb;
+  border-radius:10px;padding:8px 14px;display:flex;align-items:center;gap:10px;
+  box-shadow:0 1px 3px rgba(0,0,0,.04);}
+.fb-text{font-size:12px;font-weight:500;color:#374151;flex:1;}
 
-/* ── INPUT BAR (ChatPDF style) ── */
-.cinput{background:#f9fafb;border-top:1px solid #f3f4f6;padding:10px 14px;}
-.input-box{
-  background:#ffffff;border:1.5px solid #e5e7eb;border-radius:14px;
-  padding:8px 10px 8px 14px;display:flex;align-items:flex-end;gap:8px;
-  box-shadow:0 1px 4px rgba(0,0,0,.05);transition:.18s;
-}
-.input-box:focus-within{
-  border-color:#2563eb!important;
-  box-shadow:0 0 0 3px rgba(37,99,235,.08)!important;
-}
+/* ── UPLOAD CARD ── */
+.uc-card{max-width:820px;margin:6px auto 0;background:#fff;border:1.5px dashed #c4b5fd;
+  border-radius:10px;padding:8px 14px;display:flex;align-items:center;gap:10px;}
+.uc-icon{width:30px;height:30px;background:#f5f3ff;border-radius:8px;flex-shrink:0;
+  display:flex;align-items:center;justify-content:center;font-size:15px;}
+.uc-title{font-size:12px;font-weight:600;color:#111827;}
+.uc-sub{font-size:11px;color:#6b7280;margin-top:1px;}
 
-/* ── INPUT TEXT AREA ── */
-.input-bar .stTextArea textarea{
-  background:transparent!important;border:none!important;
-  color:#111827!important;font-size:14px!important;
-  line-height:1.55!important;resize:none!important;
-  box-shadow:none!important;outline:none!important;padding:6px 4px!important;
-  font-family:-apple-system,BlinkMacSystemFont,'Segoe UI','Inter',sans-serif!important;
-}
-.input-bar .stTextArea textarea::placeholder{color:#9ca3af!important;font-size:13.5px!important;}
-.input-bar .stTextArea textarea:focus{box-shadow:none!important;border:none!important;}
-.input-bar div[data-baseweb="textarea"]{background:transparent!important;border:none!important;}
-.input-bar .stTextArea label{display:none!important;}
-.input-bar [data-testid="stHorizontalBlock"]{align-items:center!important;}
-.input-bar [data-testid="stHorizontalBlock"] [data-testid="column"]{
-  display:flex!important;align-items:center!important;padding-bottom:0!important;}
-
-/* ── FILE UPLOADER IN BAR ── */
-div[data-testid="stFileUploader"]{min-height:0!important;}
+/* ── FILE UPLOADER ── */
 div[data-testid="stFileUploader"]>label{display:none!important;}
-section[data-testid="stFileUploaderDropzone"]{
-  min-height:38px!important;max-height:38px!important;padding:0 4px!important;
-  border:1.5px solid #e5e7eb!important;background:#f9fafb!important;
-  border-radius:10px!important;display:flex!important;align-items:center!important;
-  justify-content:center!important;overflow:hidden!important;transition:.18s!important;}
-section[data-testid="stFileUploaderDropzone"]:hover{
-  border-color:#2563eb!important;background:#eff6ff!important;}
+section[data-testid="stFileUploaderDropzone"]{border:none!important;background:transparent!important;
+  min-height:36px!important;max-height:40px!important;padding:0!important;
+  display:flex!important;align-items:center!important;justify-content:flex-end!important;}
 section[data-testid="stFileUploaderDropzone"]>div{
-  flex-direction:row!important;gap:0!important;align-items:center!important;
-  width:100%!important;justify-content:center!important;}
+  width:auto!important;flex-direction:row!important;justify-content:flex-end!important;gap:0!important;}
 section[data-testid="stFileUploaderDropzone"]>div>div:first-child{display:none!important;}
 section[data-testid="stFileUploaderDropzone"] button{
-  background:transparent!important;border:none!important;padding:0!important;
-  min-height:0!important;width:auto!important;height:auto!important;
-  font-size:0!important;cursor:pointer!important;box-shadow:none!important;
-  display:flex!important;align-items:center!important;justify-content:center!important;}
-section[data-testid="stFileUploaderDropzone"] button::before{
-  content:"📎";font-size:18px;line-height:1;display:block;}
+  background:#fff!important;border:1.5px solid #d1d5db!important;border-radius:8px!important;
+  color:#374151!important;font-size:12px!important;font-weight:500!important;
+  padding:5px 14px!important;width:auto!important;height:32px!important;
+  min-height:0!important;box-shadow:none!important;}
+section[data-testid="stFileUploaderDropzone"] button::before{content:"🗂  ";}
 div[data-testid="stFileUploader"] small{display:none!important;}
-[data-testid="stFileUploaderDeleteBtn"]{color:#dc2626!important;}
-div[data-testid="stFileUploader"] [data-testid="stFileUploaderFile"]{
-  font-size:10px!important;max-width:110px!important;overflow:hidden!important;
-  white-space:nowrap!important;text-overflow:ellipsis!important;}
+[data-testid="stFileUploaderFile"]{font-size:11px!important;}
 
-/* ── HOME FILE UPLOADER ── */
-.home-upload div[data-testid="stFileUploader"]>label{
-  font-size:12px!important;font-weight:600!important;color:#374151!important;
-  margin-bottom:4px!important;display:block!important;}
-.home-upload section[data-testid="stFileUploaderDropzone"]{
-  border:2px dashed #d1d5db!important;background:#f9fafb!important;
-  border-radius:12px!important;padding:16px!important;
-  min-height:auto!important;max-height:none!important;}
-.home-upload section[data-testid="stFileUploaderDropzone"] button{
-  background:#2563eb!important;color:#fff!important;border:none!important;
-  border-radius:8px!important;font-size:12px!important;font-weight:600!important;
-  padding:6px 14px!important;cursor:pointer!important;
-  width:auto!important;height:auto!important;}
+/* ── SUPPORT LEVEL ROW ── */
+.support-level-row{display:flex;align-items:center;gap:10px;padding:8px 0 4px;max-width:860px;margin:0 auto;}
+.support-level-label{font-size:11.5px;color:#6b7280;font-weight:600;white-space:nowrap;}
 
-/* ── SEND BUTTON (circular, ChatPDF style) ── */
-.stFormSubmitButton button{
-  background:#2563eb!important;color:#fff!important;border:none!important;
-  border-radius:50%!important;font-weight:700!important;
-  box-shadow:0 2px 8px rgba(37,99,235,.30)!important;transition:all .18s!important;
-}
-.stFormSubmitButton button:hover{
-  background:#1d4ed8!important;
-  box-shadow:0 4px 14px rgba(37,99,235,.40)!important;transform:scale(1.06)!important;}
-.input-bar .stFormSubmitButton button{
-  height:40px!important;width:40px!important;padding:0!important;
-  font-size:16px!important;min-height:0!important;border-radius:50%!important;}
-
-/* ── BUTTONS ── */
-.stButton>button{
-  border-radius:10px!important;font-weight:600!important;font-size:13px!important;
-  padding:8px 18px!important;transition:all .18s!important;
-  min-height:36px!important;line-height:1.2!important;
-}
-.stButton>button[kind="primary"],button[kind="primary"]{
-  background:#2563eb!important;color:#fff!important;border:none!important;
-  box-shadow:0 2px 8px rgba(37,99,235,.25)!important;}
-.stButton>button[kind="primary"]:hover{
-  background:#1d4ed8!important;
-  box-shadow:0 4px 14px rgba(37,99,235,.38)!important;transform:translateY(-1px)!important;}
-.stButton>button:not([kind="primary"]){
-  background:#fff!important;color:#374151!important;
-  border:1.5px solid #d1d5db!important;}
-.stButton>button:not([kind="primary"]):hover{
-  background:#f9fafb!important;border-color:#9ca3af!important;transform:translateY(-1px)!important;}
-
-/* ── FORM INPUTS ── */
-.stTextArea label,.stTextInput label{
-  font-size:12px!important;font-weight:600!important;color:#374151!important;}
-.stTextInput>div>div>input,.stTextArea>div>div>textarea{
-  background:#ffffff!important;color:#111827!important;
-  border:1.5px solid #d1d5db!important;border-radius:10px!important;font-size:13px!important;
-  font-family:-apple-system,BlinkMacSystemFont,'Segoe UI','Inter',sans-serif!important;}
-.stTextInput>div>div>input:focus,.stTextArea>div>div>textarea:focus{
-  border-color:#2563eb!important;box-shadow:0 0 0 3px rgba(37,99,235,.1)!important;}
-[data-testid="stAlert"]{border-radius:12px!important;}
-
-/* ── SELECT BOX ── */
-.stSelectbox>div>div{
-  border:1.5px solid #d1d5db!important;border-radius:10px!important;
-  background:#fff!important;font-size:13px!important;}
-.stSelectbox>div>div:focus-within{border-color:#2563eb!important;}
-
-/* ── LOGIN / INTRO CARD ── */
-.login-wrap{max-width:480px;margin:20px auto;}
-.login-banner{
-  background:linear-gradient(135deg,#1e3a8a,#2563eb,#0ea5e9);
-  border-radius:16px 16px 0 0;padding:32px 28px 24px;text-align:center;}
-.login-icon{font-size:44px;margin-bottom:10px;}
-.login-title{font-size:20px;font-weight:800;color:#fff;letter-spacing:-.3px;}
-.login-sub{font-size:12px;color:rgba(255,255,255,.72);margin-top:5px;}
-.login-chips{display:flex;justify-content:center;gap:6px;flex-wrap:wrap;margin-top:12px;}
-.chip{font-size:10px;font-weight:600;padding:4px 12px;border-radius:99px;
-  background:rgba(255,255,255,.15);border:1px solid rgba(255,255,255,.25);color:#fff;}
-.login-body{
-  background:#fff;border-radius:0 0 16px 16px;
-  border:1px solid #e5e7eb;border-top:none;padding:24px 28px;}
-
-/* ── TICKET ── */
-.ticket-card{
-  background:#fff;border:1px solid #e5e7eb;border-radius:16px;
-  box-shadow:0 4px 20px rgba(0,0,0,.07);padding:20px 24px;
-  margin:12px auto;max-width:480px;}
-.ticket-id{font-size:10px;font-weight:600;color:#2563eb;letter-spacing:.5px;
-  text-transform:uppercase;}
+/* ── TICKET CARD ── */
+.ticket-card{background:#fff;border:1px solid #e5e7eb;border-radius:16px;
+  box-shadow:0 4px 20px rgba(0,0,0,.07);padding:20px 24px;margin:12px auto;max-width:580px;}
+.ticket-id{font-size:10px;font-weight:600;color:#534AB7;letter-spacing:.5px;text-transform:uppercase;}
 .ticket-num{font-size:22px;font-weight:800;color:#111827;margin:4px 0 12px;}
 .ticket-row{display:flex;gap:10px;align-items:flex-start;margin-bottom:6px;font-size:12.5px;}
 .ticket-lbl{color:#6b7280;min-width:70px;flex-shrink:0;}
 .ticket-val{color:#111827;font-weight:600;word-break:break-all;}
-.ticket-link{
-  display:inline-flex;align-items:center;gap:6px;margin-top:12px;
-  background:#2563eb;color:#fff!important;
-  text-decoration:none;font-size:12.5px;font-weight:600;
-  padding:8px 18px;border-radius:9px;box-shadow:0 2px 8px rgba(37,99,235,.28);}
-.badge-new{display:inline-block;background:#eff6ff;color:#2563eb;
-  font-size:9px;font-weight:700;padding:2px 8px;border-radius:99px;
-  text-transform:uppercase;letter-spacing:.4px;}
+.ticket-link{display:inline-flex;align-items:center;gap:6px;margin-top:12px;
+  background:#534AB7;color:#fff!important;text-decoration:none;font-size:12.5px;font-weight:600;
+  padding:8px 18px;border-radius:9px;box-shadow:0 2px 8px rgba(83,74,183,.28);}
+.badge-new{display:inline-block;background:#ede9fe;color:#534AB7;font-size:9px;font-weight:700;
+  padding:2px 8px;border-radius:99px;text-transform:uppercase;letter-spacing:.4px;}
 
-/* ── SUPPORT LEVEL ROW ── */
-.support-level-row{
-  display:flex;align-items:center;gap:10px;padding:8px 4px 4px;
-}
-.support-level-label{
-  font-size:11.5px;color:#6b7280;font-weight:600;white-space:nowrap;
-}
-
+/* ── ANIMATIONS ── */
 @keyframes fadeUp{from{opacity:0;transform:translateY(8px)}to{opacity:1;transform:translateY(0)}}
 .anim{animation:fadeUp .3s ease both;}
 @keyframes scaleIn{from{opacity:0;transform:scale(.96)}to{opacity:1;transform:scale(1)}}
 .anim-scale{animation:scaleIn .28s ease both;}
+
+/* ── PRIMARY BUTTON (global) ── */
+div.stButton>button[kind="primary"]{
+  background:#534AB7!important;color:#fff!important;
+  border-radius:10px!important;border:none!important;font-weight:600!important;}
+div.stButton>button[kind="primary"]:hover{background:#4338ca!important;}
 </style>
 """, unsafe_allow_html=True)
 
 # ═══════════════════════════════════════════════════════════
 # SESSION STATE
 # ═══════════════════════════════════════════════════════════
+def initials(name: str) -> str:
+    parts = (name or "").strip().split()
+    if not parts:
+        return "U"
+    return (parts[0][0] + parts[-1][0]).upper() if len(parts) > 1 else parts[0][0].upper()
+
+
 def _init_state():
     defaults = {
         "page":                    "intro",
         "user":                    {"name": "Guest", "email": ""},
+        "company":                 "",
         "messages":                [],
         "issue_text":              "",
         "sf_ticket":               None,
@@ -366,6 +225,10 @@ def _init_state():
         "chat_started":            False,
         "sf_diagnosis":            "",
         "turn_count":              0,
+        # frontend state
+        "show_upload":             True,
+        "waiting_feedback":        False,
+        "input_key":               0,
     }
     for k, v in defaults.items():
         if k not in st.session_state:
@@ -1034,6 +897,10 @@ def _reset_chat_state():
     st.session_state.show_resolution_popup  = False
     st.session_state.popup_reason           = "resolved"
     st.session_state.help_count             = 0
+    st.session_state.waiting_feedback       = False
+    st.session_state.turn_count             = 0
+    st.session_state.show_upload            = True
+    st.session_state.input_key              = st.session_state.get("input_key", 0) + 1
 
 
 def _ai_detects_resolution(history: list) -> bool:
@@ -1242,33 +1109,13 @@ _CHAT_TMPL = _JTmpl("""
 """)
 
 _TYPING_HTML = """
-<style>
-@keyframes typingFade{from{opacity:0;transform:translateX(-16px) translateY(8px);}to{opacity:1;transform:none;}}
-@keyframes dotBounce{0%,60%,100%{transform:translateY(0);opacity:.3;}30%{transform:translateY(-8px);opacity:1;}}
-.qt-row{display:flex;align-items:flex-end;gap:10px;padding:6px 16px 10px;animation:typingFade .32s ease both;}
-.qt-av{
-  width:34px;height:34px;border-radius:50%;flex-shrink:0;
-  background:linear-gradient(135deg,#1e40af,#3b82f6);
-  display:flex;align-items:center;justify-content:center;font-size:17px;
-  box-shadow:0 2px 10px rgba(59,130,246,.34);
-}
-.qt-bubble{
-  background:#fff;
-  border:1.5px solid rgba(99,102,241,.14);
-  border-radius:4px 18px 18px 18px;
-  box-shadow:0 2px 12px rgba(99,102,241,.09);
-  padding:13px 18px;display:flex;gap:6px;align-items:center;
-}
-.qt-bubble span{
-  width:8px;height:8px;border-radius:50%;background:#a5b4fc;
-  display:inline-block;animation:dotBounce 1.15s infinite ease-in-out;
-}
-.qt-bubble span:nth-child(2){animation-delay:.18s;}
-.qt-bubble span:nth-child(3){animation-delay:.36s;}
-</style>
-<div class="qt-row">
-  <div class="qt-av">🤖</div>
-  <div class="qt-bubble"><span></span><span></span><span></span></div>
+<div class="typing-row" style="max-width:860px;margin:0 auto;">
+  <div class="typing-av">🤖</div>
+  <div class="typing-bubble">
+    <span class="typing-dot"></span>
+    <span class="typing-dot"></span>
+    <span class="typing-dot"></span>
+  </div>
 </div>
 """
 
@@ -1762,78 +1609,150 @@ def _build_case_knowledge(matches: list, query: str = "") -> tuple:
 
 
 # ═══════════════════════════════════════════════════════════
-# NAVBAR
-# ═══════════════════════════════════════════════════════════
-def render_navbar():
-    st.html("""
-<div class="nav">
-  <div class="nav-left">
-    <div class="nav-logo">🤖</div>
-    <div>
-      <div class="nav-title">Worksoft AI Support</div>
-      <div class="nav-sub">Qualesce &nbsp;·&nbsp; Salesforce Knowledge Base</div>
-    </div>
-  </div>
-  <div class="nav-right">
-    <div class="nav-divider"></div>
-    <span class="nav-pill">● Online</span>
-  </div>
-</div>""")
-
-
-# ═══════════════════════════════════════════════════════════
 # PAGE: CHAT
 # ═══════════════════════════════════════════════════════════
-def render_sidebar():
-    pass   # no Streamlit sidebar — controls are in the left column
-
-
-def _render_left_panel(col):
-    info = support_db.get_sync_info()
-    cnt  = info.get("case_count", 0)
-    last = info.get("last_sync", "")[:16].replace("T", " ") if info.get("last_sync") else "Never"
-    feats = "".join([
-        f'<div class="lp-feature"><span class="lp-feat-icon">{i}</span>{l}</div>'
-        for i, l in [("🔍","Smart AI search"),("📎","File & screenshot"),
-                     ("🎫","Auto ticket"),("📧","Admin notify")]
-    ])
-
-    with col:
-        st.markdown(f"""
-<div class="lp">
-  <div class="lp-logo">
-    <div class="lp-av">🤖</div>
-    <div><div class="lp-t">Worksoft AI</div><div class="lp-s">Support · Qualesce</div></div>
-  </div>
-  <span class="lp-status"><span class="lp-dot"></span>Online &amp; Ready</span>
-  <div>
-    <div class="lp-sec-title">Knowledge Base</div>
-    <div class="lp-stat">
-      <div class="lp-num">{cnt}</div>
-      <div class="lp-numlbl">Cases · Last sync: {last}</div>
-    </div>
-  </div>
-  <div>
-    <div class="lp-sec-title">Capabilities</div>
-    {feats}
-  </div>
-</div>""", unsafe_allow_html=True)
-
-        if st.button("🔄 Sync Salesforce", use_container_width=True, type="primary"):
-            with st.spinner("Syncing Salesforce…"):
-                ok, msg = sync_sf_knowledge()
-            if ok:
-                _cached_case_subjects.clear()
-                _cached_gh_info.clear()
-                if github_sync.is_configured():
-                    with st.spinner("Pushing to GitHub…"):
-                        gh_ok, gh_msg = github_sync.push_db()
-                    msg += f"\n{'☁️ ' + gh_msg if gh_ok else '⚠️ GitHub: ' + gh_msg}"
-            st.success(msg) if ok else st.error(msg)
-            st.rerun()
-
-
 def render_chat():
+    st.markdown("""
+<style>
+/* ── Strip transforms so position:fixed navbar stays viewport-relative ── */
+html,body,#root,.stApp,
+[data-testid="stAppViewContainer"],
+[data-testid="stMain"],
+[data-testid="stMainBlockContainer"]{
+  transform:none!important;filter:none!important;
+  will-change:auto!important;contain:none!important;
+}
+
+/* ── TRUE CHAT LAYOUT: flex column filling the full viewport ── */
+/* Same pattern used by ChatGPT / Claude / every production chat UI */
+html,body{height:100%!important;margin:0!important;padding:0!important;}
+#root,.stApp{height:100%!important;}
+[data-testid="stAppViewContainer"]{
+  display:flex!important;
+  flex-direction:column!important;
+  height:100vh!important;
+  overflow:hidden!important;
+}
+
+/* ── MESSAGES: grows to fill remaining space, scrolls internally ── */
+[data-testid="stMain"]{
+  flex:1 1 auto!important;
+  min-height:0!important;
+  overflow-y:auto!important;overflow-x:hidden!important;
+  position:relative!important;
+  top:unset!important;bottom:unset!important;
+  left:unset!important;right:unset!important;
+}
+[data-testid="stMain"]::-webkit-scrollbar{width:4px;}
+[data-testid="stMain"]::-webkit-scrollbar-track{background:transparent;}
+[data-testid="stMain"]::-webkit-scrollbar-thumb{background:#d1d5db;border-radius:4px;}
+[data-testid="stMain"]::-webkit-scrollbar-thumb:hover{background:#9ca3af;}
+[data-testid="stMain"]>div{
+  display:block!important;height:auto!important;min-height:unset!important;
+  padding:0!important;overflow:visible!important;
+}
+[data-testid="stMainBlockContainer"]{
+  height:auto!important;min-height:unset!important;max-height:none!important;
+  overflow:visible!important;flex:none!important;
+}
+.block-container{
+  background:transparent!important;box-shadow:none!important;border-radius:0!important;
+  max-width:880px!important;margin:0 auto!important;
+  padding:74px 16px 20px!important;
+  height:auto!important;min-height:unset!important;overflow:visible!important;
+}
+
+/* ── NAVBAR: fixed to viewport top (no transform on ancestors → works fine) ── */
+.chat-navbar{
+  position:fixed!important;
+  top:0!important;left:0!important;right:0!important;
+  height:62px!important;z-index:99999!important;
+  background:#fff!important;
+  border-bottom:1px solid #e5e7eb!important;
+  box-shadow:0 1px 6px rgba(0,0,0,.07)!important;
+}
+
+/* ── CHATBAR: last flex child → always anchored at viewport bottom, no position:fixed needed ── */
+[data-testid="stBottomBlockContainer"]{
+  flex-shrink:0!important;
+  width:100%!important;
+  background:#f0f0f5!important;
+  border-top:1px solid #e2e2ea!important;
+  padding:5px 16px 8px!important;
+  z-index:9999!important;
+  box-shadow:0 -1px 6px rgba(0,0,0,.06)!important;
+}
+
+/* ── COMPOSER PILL ── */
+[data-testid="stChatInput"]{
+  background:#fff!important;
+  border:1px solid #e0e0e8!important;
+  border-radius:22px!important;
+  padding:2px 6px 2px 16px!important;
+  box-shadow:0 1px 3px rgba(0,0,0,.05)!important;
+  max-width:820px!important;
+  margin:0 auto!important;
+  min-height:36px!important;
+}
+[data-testid="stChatInput"]:focus-within{
+  border-color:#7F77DD!important;
+  box-shadow:0 0 0 2px rgba(127,119,221,.15)!important;
+}
+[data-testid="stChatInput"] textarea{
+  background:transparent!important;border:none!important;outline:none!important;
+  box-shadow:none!important;font-size:13px!important;
+  color:#374151!important;resize:none!important;
+  min-height:28px!important;max-height:80px!important;
+  padding:4px 0!important;line-height:1.4!important;
+}
+[data-testid="stChatInput"] textarea::placeholder{color:#9ca3af!important;font-size:13px!important;}
+
+/* ── SEND BUTTON ── */
+[data-testid="stChatInputSubmitButton"]{
+  background:#e8e8f0!important;border-radius:8px!important;
+  color:#6b7280!important;border:none!important;
+  width:28px!important;height:28px!important;min-width:28px!important;
+  padding:0!important;font-size:13px!important;
+}
+[data-testid="stChatInputSubmitButton"]:hover{background:#534AB7!important;color:#fff!important;}
+
+/* ── In-chat buttons (feedback, toggle) ── */
+div.stButton>button{
+  background:#fff!important;color:#374151!important;
+  border:1px solid #d1d5db!important;border-radius:16px!important;
+  font-size:11px!important;font-weight:500!important;
+  padding:3px 11px!important;min-height:0!important;height:auto!important;
+  box-shadow:none!important;
+}
+div.stButton>button[kind="primary"]{
+  background:#534AB7!important;color:#fff!important;
+  border:none!important;border-radius:8px!important;
+  font-weight:600!important;font-size:11px!important;
+}
+div.stButton>button[kind="primary"]:hover{background:#4338ca!important;}
+</style>
+""", unsafe_allow_html=True)
+
+    _uname   = st.session_state.get("user", {}).get("name", "User")
+    _company = st.session_state.get("company", "")
+    _nav_init = initials(_uname)
+    st.markdown(f"""
+<div class="chat-navbar">
+  <div class="cn-brand">
+    <div class="cn-icon">🤖</div>
+    <span class="cn-title">AI Support Assistant</span>
+  </div>
+  <span class="cn-portal">Support Portal</span>
+  <div class="cn-user-wrap">
+    <div class="cn-user-text">
+      <span class="cn-user-name">{_uname}</span>
+      <span class="cn-user-co">{_company}</span>
+    </div>
+    <div class="cn-avatar">{_nav_init}</div>
+    <span class="cn-dots">···</span>
+  </div>
+</div>
+""", unsafe_allow_html=True)
     _live_chat()
 
 
@@ -1898,88 +1817,76 @@ def _show_resolution_dialog():
         st.rerun()
 
 
+def _build_messages_html(messages, user_initials, date_str):
+    import html as _h
+
+    def _md(text):
+        lines = text.split('\n')
+        out = []; in_ol = False; in_ul = False
+        def flush():
+            nonlocal in_ol, in_ul
+            if in_ol: out.append('</ol>'); in_ol = False
+            if in_ul: out.append('</ul>'); in_ul = False
+        for line in lines:
+            esc = _h.escape(line)
+            esc = re.sub(r'\*\*(.*?)\*\*', r'<strong>\1</strong>', esc)
+            m_n = re.match(r'^(\d+)\.\s+(.*)', esc)
+            m_b = re.match(r'^[-•*]\s+(.*)', esc)
+            if m_n:
+                if not in_ol: flush(); out.append('<ol style="margin:6px 0 6px 18px;padding:0;">'); in_ol = True
+                out.append(f'<li style="margin:3px 0;">{m_n.group(2)}</li>')
+            elif m_b:
+                if not in_ul: flush(); out.append('<ul style="margin:6px 0 6px 18px;padding:0;">'); in_ul = True
+                out.append(f'<li style="margin:3px 0;">{m_b.group(1)}</li>')
+            elif not esc.strip():
+                flush()
+            else:
+                flush(); out.append(f'<p style="margin:0 0 5px;">{esc}</p>')
+        flush()
+        return ''.join(out)
+
+    rows = [f'<div class="date-stamp">{date_str}</div>']
+    last_idx = len(messages) - 1
+    for i, msg in enumerate(messages):
+        new_cls = " new" if i == last_idx else ""
+        if msg["role"] == "assistant":
+            rows.append(f'''
+<div class="msg-row assistant{new_cls}">
+  <div class="msg-av bot">🤖</div>
+  <div class="bubble">{_md(msg["content"])}</div>
+</div>''')
+        else:
+            rows.append(f'''
+<div class="msg-row user{new_cls}">
+  <div class="bubble">{_h.escape(msg["content"])}</div>
+  <div class="msg-av user">{user_initials}</div>
+</div>''')
+    return f'<div class="chat-msgs">{"".join(rows)}</div>'
+
+
 @st.fragment
 def _live_chat():
-    """
-    Fragment: only the chat panel reruns on each message — sidebar/navbar stay frozen.
-    """
-    # ── Auto-welcome on very first load ──────────────────────
+    # Init upload-panel toggle
+    if "show_upload" not in st.session_state:
+        st.session_state.show_upload = True
+
+    # Auto-welcome on very first load
     if not st.session_state.get("chat_started"):
         st.session_state.chat_started = True
         _first_name = (st.session_state.get("user", {}).get("name") or "there").split()[0]
         welcome = (
-            f"Hello, **{_first_name}**! 👋 I'm your **Worksoft AI Support Assistant**, "
-            f"powered by real resolved cases from our Salesforce knowledge base.\n\n"
-            "I'm here to help with **CTM, Certify, Portal, and Capture** — and I'll make sure I fully understand your issue before suggesting any fix.\n\n"
-            "Go ahead and describe what's happening. You can also attach a **screenshot, log file, or PDF** using the 📎 icon below."
+            f"Hello, **{_first_name}**! 👋 I'm your **AI Support Assistant**. "
+            f"How can I help you today? You can ask me about troubleshooting, "
+            "account issues, or anything else."
         )
         st.session_state.messages.append({"role": "assistant", "content": welcome})
 
-    # ── Full-width chat top bar ──────────────────────────────
-    _user  = st.session_state.get("user", {})
-    _uname = _user.get("name", "Guest")
-    _uemail = _user.get("email", "")
-    _initials = (_uname[0].upper()) if _uname and _uname != "Guest" else "G"
-    _user_tag = _uname + (f" &nbsp;&middot;&nbsp; {_uemail}" if _uemail else "")
-    st.html(f"""
-<style>
-/* Full-width chat page */
-html,body,[data-testid="stAppViewContainer"]{{background:#f9fafb!important;}}
-.block-container{{max-width:860px!important;margin:0 auto!important;padding:0 0 0!important;}}
-/* Top bar */
-.ctop{{
-  display:flex;align-items:center;justify-content:space-between;
-  padding:14px 20px;background:#ffffff;
-  border-bottom:1px solid #e5e7eb;
-  border-radius:16px 16px 0 0;
-  margin-bottom:0;
-}}
-.ctop-left{{display:flex;align-items:center;gap:12px;}}
-.ctop-av{{
-  width:38px;height:38px;border-radius:50%;
-  background:linear-gradient(135deg,#2563eb,#3b82f6);
-  display:flex;align-items:center;justify-content:center;font-size:18px;
-}}
-.ctop-name{{font-size:15px;font-weight:700;color:#111827;}}
-.ctop-sub{{font-size:11px;color:#9ca3af;margin-top:1px;}}
-.ctop-online{{
-  display:inline-flex;align-items:center;gap:5px;
-  font-size:10.5px;font-weight:600;color:#16a34a;margin-top:2px;
-}}
-.ctop-dot{{width:6px;height:6px;border-radius:50%;background:#22c55e;animation:pulse 1.8s infinite;}}
-.ctop-right{{display:flex;align-items:center;gap:8px;}}
-.ctop-user{{
-  display:flex;align-items:center;gap:8px;
-  background:#f3f4f6;border:1px solid #e5e7eb;
-  border-radius:8px;padding:6px 12px;
-}}
-.ctop-user-av{{
-  width:26px;height:26px;border-radius:50%;
-  background:#111827;color:#fff;
-  display:flex;align-items:center;justify-content:center;
-  font-size:11px;font-weight:700;flex-shrink:0;
-}}
-.ctop-user-name{{font-size:12px;font-weight:600;color:#374151;}}
-</style>
-<div class="ctop">
-  <div class="ctop-left">
-    <div class="ctop-av">🤖</div>
-    <div>
-      <div class="ctop-name">Worksoft AI Support</div>
-      <span class="ctop-online"><span class="ctop-dot"></span>Online &amp; Ready</span>
-    </div>
-  </div>
-  <div class="ctop-right">
-    <div class="ctop-user">
-      <div class="ctop-user-av">{_initials}</div>
-      <span class="ctop-user-name">{_user_tag}</span>
-    </div>
-  </div>
-</div>""")
-
-    # ── Messages (scrollable) ────────────────────────────────
-    if st.session_state.messages:
-        st.html(_render_messages_html(st.session_state.messages))
+    # Build + render message bubbles as HTML
+    from datetime import datetime
+    _uname    = st.session_state.get("user", {}).get("name", "User")
+    _initials = initials(_uname)
+    _now      = datetime.now().strftime("Today, %I:%M %p").lstrip("0")
+    st.markdown(_build_messages_html(st.session_state.messages, _initials, _now), unsafe_allow_html=True)
 
     # Inline images from file uploads
     for msg in st.session_state.messages:
@@ -1990,86 +1897,100 @@ html,body,[data-testid="stAppViewContainer"]{{background:#f9fafb!important;}}
                 caption=fdata["name"], width=260,
             )
 
-    # ── Input bar ────────────────────────────────────────────
-    st.markdown('<div class="input-bar">', unsafe_allow_html=True)
-    st.markdown('<div class="input-box">', unsafe_allow_html=True)
-    with st.form("chat_form", clear_on_submit=True):
-        att_col, txt_col, snd_col = st.columns([1, 9, 1])
-        with att_col:
-            uploaded = st.file_uploader(
-                "attach",
-                type=["png","jpg","jpeg","gif","webp","pdf","txt","log","csv","xml"],
-                label_visibility="collapsed",
-            )
-        with txt_col:
-            user_input = st.text_area(
-                "msg",
-                placeholder="Describe your Worksoft issue…",
-                height=52,
-                label_visibility="collapsed",
-            )
-        with snd_col:
-            send = st.form_submit_button("➤", use_container_width=True, type="primary")
-    st.markdown('</div>', unsafe_allow_html=True)  # input-box
-    st.markdown('</div>', unsafe_allow_html=True)  # input-bar
-
-    # ── Resolution check popup + action buttons ───────────────
+    # Resolution popup + L1/L2 action buttons
     msgs = st.session_state.messages
     if msgs and msgs[-1]["role"] == "assistant" and len(msgs) >= 2:
-        already_shown = st.session_state.get("resolution_check_shown", False)
-
-        # Popup only when the AI has determined the issue is resolved
-        if st.session_state.get("show_resolution_popup") and not already_shown:
+        if st.session_state.get("show_resolution_popup") and not st.session_state.get("resolution_check_shown"):
             _show_resolution_dialog()
 
-        # Persistent action buttons always visible after first assistant reply
-        st.markdown(
-            '<div class="support-level-row">'
-            '<span class="support-level-label">Close ticket:</span>'
-            '</div>',
-            unsafe_allow_html=True,
-        )
-        rc1, rc2, _ = st.columns([1.5, 1.7, 3])
-        with rc1:
-            if st.button("✅ Resolved at L1", use_container_width=True, type="primary"):
+    # ── Feedback card ("Did this resolve your issue?")
+    if st.session_state.get("waiting_feedback") and msgs and msgs[-1]["role"] == "assistant":
+        st.markdown("""
+<div class="fb-card">
+  <span class="fb-text">Did this resolve your issue?</span>
+</div>""", unsafe_allow_html=True)
+        fc1, fc2, _ = st.columns([1, 1.2, 5])
+        with fc1:
+            if st.button("✅ Resolved", key="btn_fb_resolved"):
+                st.session_state.waiting_feedback = False
                 st.session_state.resolution_check_shown = True
                 st.session_state.page = "resolved"
                 st.rerun(scope="app")
-        with rc2:
-            if st.button("🔺 Forward to L2", use_container_width=True):
+        with fc2:
+            if st.button("❌ Not Resolved", key="btn_fb_not"):
+                st.session_state.waiting_feedback = False
                 st.session_state.resolution_check_shown = True
                 st.session_state.page = "escalated"
                 st.rerun(scope="app")
 
-    # ── Handle send ──────────────────────────────────────────
-    if send and (user_input.strip() or uploaded):
+    # ── Upload card (dashed #c4b5fd border, uc-card layout) — in scrollable area
+    uploaded = None
+    if st.session_state.show_upload:
+        st.markdown("""
+<div class="uc-card">
+  <div class="uc-icon">⬆️</div>
+  <div class="uc-text">
+    <div class="uc-title">Upload screenshot or error log</div>
+    <div class="uc-sub">Drag &amp; drop, or click to browse — PNG, JPG, PDF, TXT</div>
+  </div>
+</div>""", unsafe_allow_html=True)
+        uploaded = st.file_uploader(
+            "Browse",
+            type=["png","jpg","jpeg","gif","webp","pdf","txt","log","csv","xml"],
+            key=f"fu_{st.session_state.fu_key}",
+        )
+
+    # ── Toggle button
+    toggle_label = "Hide upload panel" if st.session_state.show_upload else "Show upload panel"
+    if st.button(toggle_label, key="toggle_upload_btn"):
+        st.session_state.show_upload = not st.session_state.show_upload
+        st.rerun()
+
+    # ── Auto-scroll the stMain container to show the latest message
+    import streamlit.components.v1 as _cmp
+    _cmp.html("""
+<script>
+(function(){
+  try{
+    var main = window.parent.document.querySelector('[data-testid="stMain"]');
+    if(main) main.scrollTop = main.scrollHeight;
+  }catch(e){}
+})();
+</script>""", height=0)
+
+    # ── Chat input — Streamlit places this at the bottom of the screen automatically
+    user_input = st.chat_input("Ask Anything...")
+
+    # Handle send (text message or file upload)
+    if user_input or uploaded:
+        text = (user_input or "").strip()
         file_data = _process_upload(uploaded) if uploaded else None
-        user_msg  = {"role": "user", "content": user_input.strip()}
+        user_msg  = {"role": "user", "content": text}
         fname = uploaded.name if uploaded else ""
         ftype = (file_data or {}).get("type", "")
         if file_data:
             user_msg["file"] = file_data
         if not st.session_state.issue_text:
-            st.session_state.issue_text = user_input.strip() or f"[Attached: {fname}]"
+            st.session_state.issue_text = text or f"[Attached: {fname}]"
 
-        # Auto-create session on first message (no login required)
         if not st.session_state.get("session_id"):
             st.session_state.session_id = support_db.create_session("Guest", "")
 
         st.session_state.messages.append(user_msg)
         sid = st.session_state.get("session_id")
         if sid:
-            support_db.save_message(sid, "user", user_input.strip(), fname, ftype)
+            support_db.save_message(sid, "user", text, fname, ftype)
 
         _typing_slot = st.empty()
-        _typing_slot.html(_TYPING_HTML)
+        _typing_slot.markdown(_TYPING_HTML, unsafe_allow_html=True)
+        # Scroll stMain so typing indicator is visible above the chatbar
+        _cmp.html("""<script>(function(){try{var m=window.parent.document.querySelector('[data-testid="stMain"]');if(m)m.scrollTop=m.scrollHeight;}catch(e){}})()</script>""", height=0)
         _stream_slot = st.empty()
         st.session_state["_stream_slot"] = _stream_slot
         st.session_state["_typing_slot"] = _typing_slot
 
-        reply = process_chat(user_input.strip(), st.session_state.messages, file_data)
+        reply = process_chat(text, st.session_state.messages, file_data)
 
-        # Cleanup streaming state (may already be gone if streaming fired)
         st.session_state.pop("_stream_slot", None)
         st.session_state.pop("_typing_slot", None)
         _typing_slot.empty()
@@ -2078,6 +1999,12 @@ html,body,[data-testid="stAppViewContainer"]{{background:#f9fafb!important;}}
         st.session_state.messages.append({"role": "assistant", "content": reply})
         if sid:
             support_db.save_message(sid, "assistant", reply)
+
+        # Increment turn count; show feedback only after 3 exchanges
+        st.session_state.turn_count = st.session_state.get("turn_count", 0) + 1
+        if st.session_state.turn_count >= 3:
+            st.session_state.waiting_feedback = True
+
         st.rerun()
 
 
@@ -2085,7 +2012,16 @@ html,body,[data-testid="stAppViewContainer"]{{background:#f9fafb!important;}}
 # PAGE: RESOLVED
 # ═══════════════════════════════════════════════════════════
 def render_resolved():
-    render_navbar()
+    st.markdown("""
+<div class="chat-navbar">
+  <div class="cn-brand">
+    <div class="cn-icon">🤖</div>
+    <span class="cn-title">AI Support Assistant</span>
+  </div>
+  <span class="cn-portal">Support Portal</span>
+  <div></div>
+</div>
+""", unsafe_allow_html=True)
     st.markdown("""
 <div style="max-width:480px;margin:48px auto;text-align:center;
      background:rgba(255,255,255,.88);backdrop-filter:blur(18px);
@@ -2122,7 +2058,16 @@ def render_resolved():
 # PAGE: ESCALATED
 # ═══════════════════════════════════════════════════════════
 def render_escalated():
-    render_navbar()
+    st.markdown("""
+<div class="chat-navbar">
+  <div class="cn-brand">
+    <div class="cn-icon">🤖</div>
+    <span class="cn-title">AI Support Assistant</span>
+  </div>
+  <span class="cn-portal">Support Portal</span>
+  <div></div>
+</div>
+""", unsafe_allow_html=True)
     issue_text = st.session_state.issue_text or "Worksoft issue (see conversation)"
 
     if st.session_state.sf_ticket:
@@ -2294,183 +2239,98 @@ def _render_ticket(user, ticket):
 
 
 # ═══════════════════════════════════════════════════════════
-# PAGE: INTRO (name + email gate)
+# PAGE: INTRO (onboarding gate)
 # ═══════════════════════════════════════════════════════════
 def render_intro():
-    info = support_db.get_sync_info()
-    cnt  = info.get("case_count", 0)
-    last = info.get("last_sync", "")[:16].replace("T", " ") if info.get("last_sync") else "Never"
-
-    # ── Global CSS injected once ─────────────────────────────
+    # Page-specific CSS: centre the block-container and style it as the white card.
+    # Inputs keep visible borders here; the chat page overrides them to be borderless.
     st.markdown("""
 <style>
-html,body,[data-testid="stAppViewContainer"]{background:#f3f4f6!important;}
-.block-container{max-width:100%!important;padding:16px 20px 0!important;}
-
-/* ── LEFT PANEL content ── */
-.il-panel{background:#111827;border-radius:16px;padding:36px 28px;
-  min-height:87vh;display:flex;flex-direction:column;gap:22px;}
-.il-brand{display:flex;align-items:center;gap:14px;}
-.il-av{width:46px;height:46px;border-radius:13px;
-  background:linear-gradient(135deg,#2563eb,#3b82f6);
-  display:flex;align-items:center;justify-content:center;font-size:22px;flex-shrink:0;}
-.il-name{font-size:17px;font-weight:800;color:#f9fafb;letter-spacing:-.3px;}
-.il-tagline{font-size:11px;color:#6b7280;margin-top:2px;}
-.il-divider{height:1px;background:rgba(255,255,255,.07);margin:2px 0;}
-.il-desc{font-size:12.5px;color:#9ca3af;line-height:1.75;
-  border-left:3px solid #2563eb;padding-left:14px;}
-.il-section-title{font-size:9px;font-weight:700;color:#4b5563;
-  text-transform:uppercase;letter-spacing:1px;margin-bottom:10px;}
-.il-stat-card{background:rgba(255,255,255,.04);border:1px solid rgba(255,255,255,.07);
-  border-radius:11px;padding:14px 18px;position:relative;overflow:hidden;}
-.il-stat-card::before{content:'';position:absolute;top:0;left:0;right:0;height:2px;
-  background:linear-gradient(90deg,#2563eb,#0ea5e9);}
-.il-stat-num{font-size:28px;font-weight:900;color:#f9fafb;line-height:1;}
-.il-stat-lbl{font-size:11px;color:#6b7280;margin-top:4px;}
-.il-feat{display:flex;align-items:center;gap:10px;padding:7px 0;
-  border-bottom:1px solid rgba(255,255,255,.06);font-size:12px;color:#9ca3af;}
-.il-feat:last-child{border-bottom:none;}
-.il-feat-icon{width:26px;height:26px;border-radius:7px;
-  background:rgba(37,99,235,.15);
-  display:flex;align-items:center;justify-content:center;font-size:12px;flex-shrink:0;}
-.il-products{display:flex;gap:6px;flex-wrap:wrap;}
-.il-prod{font-size:11px;font-weight:600;padding:4px 13px;border-radius:6px;
-  background:rgba(37,99,235,.15);border:1px solid rgba(37,99,235,.25);color:#93c5fd;}
-
-/* ── RIGHT PANEL ── */
-.ir-header{padding:44px 8px 20px;}
-.ir-welcome{font-size:26px;font-weight:800;color:#111827;letter-spacing:-.4px;margin-bottom:8px;}
-.ir-sub{font-size:13px;color:#6b7280;line-height:1.65;}
-.ir-footer{text-align:center;font-size:11.5px;color:#9ca3af;line-height:1.6;margin-top:8px;}
-
-/* ── Rectangle Start Chat button ── */
-.stFormSubmitButton>button{
-  border-radius:8px!important;height:50px!important;
-  font-size:15px!important;font-weight:700!important;
-  background:#111827!important;color:#fff!important;
-  border:none!important;letter-spacing:.3px!important;box-shadow:none!important;
+/* ── INTRO: make stMain fill the viewport height so card is vertically centred ── */
+[data-testid="stMain"]>div{
+  display:flex!important;align-items:center!important;justify-content:center!important;
+  min-height:100vh!important;padding:40px 16px!important;
 }
-.stFormSubmitButton>button:hover{background:#1f2937!important;transform:none!important;}
-
-/* ── Sync Salesforce button ── */
-[data-testid="stBaseButton-secondary"]{
-  border-radius:8px!important;height:40px!important;
-  font-size:13px!important;font-weight:600!important;
-  background:#f9fafb!important;color:#374151!important;
-  border:1.5px solid #d1d5db!important;letter-spacing:.1px!important;
+/* ── INTRO: block-container = the white card ── */
+.block-container{
+  background:#fff!important;border-radius:18px!important;
+  box-shadow:0 4px 32px rgba(0,0,0,.10)!important;
+  padding:44px 48px 40px!important;
+  max-width:580px!important;width:100%!important;
+  margin:0!important;
 }
-[data-testid="stBaseButton-secondary"]:hover{
-  background:#f3f4f6!important;border-color:#9ca3af!important;
-}
-
-/* Form field labels */
-.stTextInput label{font-size:13px!important;font-weight:600!important;color:#374151!important;}
+/* ── INTRO: visible input fields ── */
+.stTextInput label{display:block!important;font-size:13px!important;font-weight:500!important;color:#374151!important;margin-bottom:4px!important;}
 .stTextInput>div>div>input{
-  height:46px!important;border-radius:8px!important;
-  border:1.5px solid #d1d5db!important;font-size:14px!important;
-  padding:0 14px!important;background:#fff!important;color:#111827!important;
+  padding:10px 14px!important;
+  border:1.5px solid #e5e7eb!important;border-radius:10px!important;
+  font-size:14px!important;color:#111827!important;
+  background:#f9fafb!important;height:auto!important;
+  outline:none!important;box-shadow:none!important;
 }
-.stTextInput>div>div>input:focus{border-color:#2563eb!important;
-  box-shadow:0 0 0 3px rgba(37,99,235,.1)!important;}
-</style>""", unsafe_allow_html=True)
+.stTextInput>div>div>input::placeholder{color:#9ca3af!important;}
+.stTextInput>div>div>input:focus{
+  border-color:#534AB7!important;
+  box-shadow:0 0 0 3px rgba(83,74,183,.12)!important;
+  background:#fff!important;
+}
+.stTextInput>div>div{border:none!important;background:transparent!important;box-shadow:none!important;}
+/* ── INTRO: continue button ── */
+div.stButton>button{width:100%!important;padding:12px!important;background:#534AB7!important;
+  color:#fff!important;border:none!important;border-radius:10px!important;
+  font-size:15px!important;font-weight:600!important;margin-top:4px!important;}
+div.stButton>button:hover{background:#4338ca!important;}
+</style>
+""", unsafe_allow_html=True)
 
-    # ── Two-column layout — Streamlit handles the split ──────
-    left_col, right_col = st.columns([1.1, 1.4], gap="medium")
+    # Logo / title / subtitle rendered as inline HTML (no Streamlit widgets = no nesting problem)
+    st.markdown("""
+<div style="display:flex;flex-direction:column;align-items:center;margin-bottom:28px;">
+  <div style="width:60px;height:60px;border-radius:16px;
+       background:linear-gradient(135deg,#534AB7,#7F77DD);
+       display:flex;align-items:center;justify-content:center;
+       font-size:30px;margin-bottom:16px;">🤖</div>
+  <div style="font-size:24px;font-weight:700;color:#111827;margin-bottom:8px;text-align:center;">
+    AI Support Assistant</div>
+  <div style="font-size:14px;color:#6b7280;text-align:center;">
+    Please provide your details to continue</div>
+</div>
+""", unsafe_allow_html=True)
 
-    # ── LEFT: pure self-contained HTML (no widgets) ──────────
-    with left_col:
-        st.markdown(f"""
-<div class="il-panel">
-  <div class="il-brand">
-    <div class="il-av">🤖</div>
-    <div>
-      <div class="il-name">Worksoft AI Support</div>
-      <div class="il-tagline">Qualesce &nbsp;·&nbsp; Powered by Salesforce</div>
-    </div>
-  </div>
+    c1, c2 = st.columns(2)
+    with c1:
+        name = st.text_input("Name", placeholder="Alex Johnson")
+    with c2:
+        email = st.text_input("Corporate Email", placeholder="alex@acme.com")
+    company = st.text_input("Company Name", placeholder="Acme Corp")
 
-  <div class="il-divider"></div>
-
-  <div class="il-desc">
-    Intelligent L1 support for Worksoft products — trained on real resolved cases
-    from your Salesforce knowledge base.
-  </div>
-
-  <div>
-    <div class="il-section-title">Knowledge Base</div>
-    <div class="il-stat-card">
-      <div class="il-stat-num">{cnt}</div>
-      <div class="il-stat-lbl">Resolved cases &nbsp;·&nbsp; Last sync: {last}</div>
-    </div>
-  </div>
-
-  <div>
-    <div class="il-section-title">Products Supported</div>
-    <div class="il-products">
-      <span class="il-prod">CTM</span>
-      <span class="il-prod">Certify</span>
-      <span class="il-prod">Portal</span>
-      <span class="il-prod">Capture</span>
-    </div>
-  </div>
-
-  <div>
-    <div class="il-section-title">Capabilities</div>
-    <div class="il-feat"><span class="il-feat-icon">🔍</span>&nbsp; Smart AI semantic search</div>
-    <div class="il-feat"><span class="il-feat-icon">📎</span>&nbsp; File, screenshot &amp; PDF support</div>
-    <div class="il-feat"><span class="il-feat-icon">🎫</span>&nbsp; Auto Salesforce ticket creation</div>
-    <div class="il-feat"><span class="il-feat-icon">📧</span>&nbsp; IT Admin email notification</div>
-  </div>
-</div>""", unsafe_allow_html=True)
-
-    # ── RIGHT: welcome header + Streamlit form ────────────────
-    with right_col:
-        st.markdown("""
-<div class="ir-header">
-  <div class="ir-welcome">Welcome 👋</div>
-  <div class="ir-sub">Tell us who you are to get started.<br>
-  Your AI support session will be personalised.</div>
-</div>""", unsafe_allow_html=True)
-
-        with st.form("intro_form"):
-            name  = st.text_input("Your Name",  placeholder="e.g. Aravind R")
-            email = st.text_input("Work Email", placeholder="you@qualesce.com")
-            st.markdown('<div style="height:4px;"></div>', unsafe_allow_html=True)
-            submitted = st.form_submit_button(
-                "Start Chat  →", use_container_width=True, type="primary"
-            )
-
-        st.markdown('<div class="ir-footer">Your details are used only to personalise<br>support and attach to any ticket raised.</div>',
-                    unsafe_allow_html=True)
-
-        st.markdown('<div style="height:18px;"></div>', unsafe_allow_html=True)
-        st.markdown('<hr style="border:none;border-top:1px solid #e5e7eb;margin:0;">', unsafe_allow_html=True)
-        st.markdown('<div style="height:12px;"></div>', unsafe_allow_html=True)
-        sync_clicked = st.button("🔄  Sync Salesforce", key="intro_sync_sf", use_container_width=True)
-
-    # ── Handle sync (must be outside columns so spinner renders full-width) ──
-    if sync_clicked:
-        with st.spinner("Syncing knowledge base from Salesforce…"):
-            ok, msg = sync_sf_knowledge()
-        if ok:
-            _cached_case_subjects.clear()
-            st.success(f"✅ {msg}")
-            st.rerun()
+    if st.button("Continue →", use_container_width=True):
+        name_val    = name.strip()
+        email_val   = email.strip()
+        company_val = company.strip()
+        if not name_val:
+            st.error("Please enter your name.")
+        elif not email_val or "@" not in email_val:
+            st.error("Please enter a valid corporate email.")
+        elif not company_val:
+            st.error("Please enter your company name.")
         else:
-            st.error(f"❌ {msg}")
-
-    # ── Handle submit (outside columns — variables still in scope) ──
-    if submitted:
-        name_val  = name.strip()  or "Guest"
-        email_val = email.strip() or ""
-        if email_val and "@" not in email_val:
-            st.error("Please enter a valid email address.")
-        else:
-            st.session_state.user = {"name": name_val, "email": email_val}
+            st.session_state.user    = {"name": name_val, "email": email_val}
+            st.session_state.company = company_val
             if not st.session_state.get("session_id"):
                 st.session_state.session_id = support_db.create_session(name_val, email_val)
             st.session_state.page = "chat"
             st.rerun()
+
+    st.markdown('<div style="margin-top:8px;border-top:1px solid #f3f4f6;padding-top:12px;"></div>', unsafe_allow_html=True)
+    if st.button("🔄 Sync Salesforce Knowledge Base", key="intro_sync_sf", use_container_width=True):
+        with st.spinner("Syncing…"):
+            ok, msg = sync_sf_knowledge()
+        if ok:
+            _cached_case_subjects.clear()
+            st.success(f"✅ {msg}")
+        else:
+            st.error(f"❌ {msg}")
 
 
 # ═══════════════════════════════════════════════════════════

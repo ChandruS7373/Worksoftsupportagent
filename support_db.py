@@ -305,6 +305,18 @@ def search_knowledge(query: str = "", top_n: int = 5) -> list:
                 if len(w) >= 4 and len(token) >= 4:
                     if token.startswith(w[:4]) or w.startswith(token[:4]):
                         s += 1
+        # Multi-word phrase bonus — consecutive keywords appearing together score much higher
+        if len(words) >= 2:
+            phrase = " ".join(words)
+            if phrase in comments: s += 20
+            if phrase in desc:     s += 15
+            if phrase in subj:     s += 10
+            # Also try all 2-word adjacent pairs from the query
+            for i in range(len(words) - 1):
+                pair = words[i] + " " + words[i + 1]
+                if pair in comments: s += 8
+                if pair in desc:     s += 6
+                if pair in subj:     s += 4
         return s
 
     scored = sorted([dict(r) for r in rows], key=score, reverse=True)

@@ -60,137 +60,140 @@ st.set_page_config(
 # ═══════════════════════════════════════════════════════════
 st.markdown("""
 <style>
-/* ── RESET ── */
+/* ── RESET & BASE ── */
 *{box-sizing:border-box;margin:0;padding:0;}
-html,body,[data-testid="stAppViewContainer"]{background:#f0f4ff!important;}
+html,body,[data-testid="stAppViewContainer"]{
+  background:#f5f5f5!important;
+  min-height:100vh;
+  font-family:-apple-system,BlinkMacSystemFont,'Segoe UI','Inter',sans-serif!important;
+}
 header,#MainMenu,footer,.stDeployButton{display:none!important;}
 [data-testid="stSidebar"]{display:none!important;}
 [data-testid="stMain"]>div{padding-top:0!important;}
-.block-container{max-width:100%!important;padding:4px 12px 0!important;}
+.block-container{max-width:100%!important;padding:10px 16px 0!important;}
 
 /* ── NAVBAR ── */
 .nav{
-  height:52px;background:#fff;
-  border-bottom:2px solid #e0e7ff;
+  height:56px;background:#ffffff;
+  border-bottom:1px solid #e5e7eb;
   display:flex;align-items:center;justify-content:space-between;
-  padding:0 20px;margin-bottom:10px;border-radius:14px;
-  box-shadow:0 1px 8px rgba(99,102,241,.08);
+  padding:0 20px;margin-bottom:12px;border-radius:12px;
+  box-shadow:0 1px 4px rgba(0,0,0,.06);
 }
-.nav-left{display:flex;align-items:center;gap:10px;}
+.nav-left{display:flex;align-items:center;gap:12px;}
 .nav-logo{
-  width:34px;height:34px;border-radius:10px;flex-shrink:0;
-  background:linear-gradient(135deg,#1e40af,#3b82f6);
+  width:36px;height:36px;border-radius:10px;flex-shrink:0;
+  background:linear-gradient(135deg,#2563eb,#3b82f6);
   display:flex;align-items:center;justify-content:center;
-  font-size:18px;box-shadow:0 2px 8px rgba(59,130,246,.35);
+  font-size:18px;
 }
-.nav-title{font-size:14px;font-weight:800;color:#0f172a;letter-spacing:-.2px;}
-.nav-sub{font-size:10px;color:#94a3b8;margin-top:1px;}
+.nav-title{font-size:14px;font-weight:700;color:#111827;letter-spacing:-.2px;}
+.nav-sub{font-size:11px;color:#9ca3af;margin-top:1px;}
 .nav-right{display:flex;align-items:center;gap:8px;}
 .nav-pill{
-  font-size:11px;font-weight:700;padding:4px 12px;border-radius:99px;
-  background:linear-gradient(135deg,#1e40af,#3b82f6);color:#fff;
-  letter-spacing:.4px;
+  font-size:11px;font-weight:600;padding:5px 14px;border-radius:99px;
+  background:#eff6ff;color:#2563eb;border:1px solid #bfdbfe;
+  letter-spacing:.2px;
 }
-.nav-user{font-size:12px;font-weight:600;color:#1e40af;
-  background:#eff6ff;border:1.5px solid #bfdbfe;
-  padding:4px 12px;border-radius:99px;}
+.nav-divider{width:1px;height:20px;background:#e5e7eb;}
 
-/* ── LEFT PANEL ── */
+/* ── LEFT PANEL (ChatPDF sidebar style) ── */
 .lp{
-  background:#1e293b;border-radius:16px;
+  background:#111827;
+  border-radius:16px;
   padding:20px 16px;display:flex;flex-direction:column;gap:14px;
-  box-shadow:0 4px 20px rgba(15,23,42,.25);
+  min-height:calc(100vh - 100px);
+  box-shadow:0 4px 20px rgba(0,0,0,.18);
 }
-.lp-logo{display:flex;align-items:center;gap:10px;
-  padding-bottom:14px;border-bottom:1px solid rgba(255,255,255,.07);}
-.lp-av{width:38px;height:38px;border-radius:10px;flex-shrink:0;
-  background:linear-gradient(135deg,#1e40af,#3b82f6);
-  display:flex;align-items:center;justify-content:center;font-size:20px;
-  box-shadow:0 2px 10px rgba(59,130,246,.4);}
-.lp-t{font-size:13px;font-weight:800;color:#f1f5f9;}
-.lp-s{font-size:10px;color:#64748b;margin-top:1px;}
+.lp-logo{display:flex;align-items:center;gap:11px;
+  padding-bottom:16px;border-bottom:1px solid rgba(255,255,255,.07);}
+.lp-av{width:40px;height:40px;border-radius:10px;flex-shrink:0;
+  background:linear-gradient(135deg,#2563eb,#3b82f6);
+  display:flex;align-items:center;justify-content:center;font-size:20px;}
+.lp-t{font-size:13px;font-weight:700;color:#f9fafb;}
+.lp-s{font-size:10px;color:#6b7280;margin-top:2px;}
 .lp-status{
   display:inline-flex;align-items:center;gap:5px;
   background:rgba(34,197,94,.1);border:1px solid rgba(34,197,94,.2);
-  color:#4ade80;font-size:10px;font-weight:700;
+  color:#4ade80;font-size:10px;font-weight:600;
   padding:4px 10px;border-radius:99px;text-transform:uppercase;letter-spacing:.4px;
   width:fit-content;
 }
 .lp-dot{width:5px;height:5px;border-radius:50%;background:#22c55e;
-  animation:pulse 1.6s infinite;}
-@keyframes pulse{0%,100%{opacity:1;transform:scale(1)}50%{opacity:.4;transform:scale(1.4)}}
-.lp-sec-title{font-size:9px;font-weight:700;color:#475569;
-  text-transform:uppercase;letter-spacing:.8px;margin-bottom:4px;}
-.lp-stat{background:rgba(255,255,255,.05);border:1px solid rgba(255,255,255,.07);
-  border-radius:10px;padding:12px 14px;}
-.lp-num{font-size:26px;font-weight:900;color:#e2e8f0;line-height:1;}
-.lp-numlbl{font-size:10px;color:#64748b;margin-top:3px;}
-.lp-feature{display:flex;align-items:center;gap:8px;padding:5px 0;
-  border-bottom:1px solid rgba(255,255,255,.04);font-size:11px;color:#94a3b8;}
-.lp-feature:last-child{border-bottom:none;}
-.lp-user{
-  margin-top:auto;background:rgba(255,255,255,.04);
-  border:1px solid rgba(255,255,255,.07);border-radius:10px;padding:10px 12px;
+  animation:pulse 1.8s infinite;}
+@keyframes pulse{0%,100%{opacity:1;transform:scale(1)}50%{opacity:.35;transform:scale(1.5)}}
+.lp-sec-title{font-size:9px;font-weight:600;color:#4b5563;
+  text-transform:uppercase;letter-spacing:.9px;margin-bottom:5px;}
+.lp-stat{
+  background:rgba(255,255,255,.04);
+  border:1px solid rgba(255,255,255,.07);
+  border-radius:10px;padding:12px 14px;
 }
-.lp-uname{font-size:12px;font-weight:700;color:#e2e8f0;}
-.lp-uemail{font-size:10px;color:#64748b;margin-top:2px;}
+.lp-num{font-size:26px;font-weight:800;color:#f3f4f6;line-height:1;}
+.lp-numlbl{font-size:10px;color:#6b7280;margin-top:3px;}
+.lp-feature{
+  display:flex;align-items:center;gap:9px;padding:6px 0;
+  border-bottom:1px solid rgba(255,255,255,.05);font-size:11.5px;color:#9ca3af;
+}
+.lp-feature:last-child{border-bottom:none;}
+.lp-feat-icon{
+  width:24px;height:24px;border-radius:6px;flex-shrink:0;
+  background:rgba(37,99,235,.15);
+  display:flex;align-items:center;justify-content:center;font-size:12px;
+}
 
-/* ── CHAT WINDOW ── */
+/* ── CHAT PANEL (ChatPDF main area) ── */
 .cwin{
-  background:#fff;border-radius:16px;
-  border:1.5px solid #e0e7ff;
-  box-shadow:0 4px 20px rgba(99,102,241,.08);
+  background:#ffffff;border-radius:16px;
+  border:1px solid #e5e7eb;
+  box-shadow:0 2px 12px rgba(0,0,0,.06);
   overflow:hidden;
 }
 .chead{
-  height:58px;display:flex;align-items:center;justify-content:space-between;
-  padding:0 18px;background:#fff;
-  border-bottom:1.5px solid #f1f5f9;
+  height:60px;display:flex;align-items:center;justify-content:space-between;
+  padding:0 20px;background:#ffffff;
+  border-bottom:1px solid #f3f4f6;
 }
-.chead-left{display:flex;align-items:center;gap:10px;}
+.chead-left{display:flex;align-items:center;gap:12px;}
 .chead-av{
-  width:36px;height:36px;border-radius:10px;flex-shrink:0;
-  background:linear-gradient(135deg,#1e40af,#3b82f6);
-  display:flex;align-items:center;justify-content:center;font-size:19px;
-  box-shadow:0 2px 8px rgba(59,130,246,.3);
+  width:38px;height:38px;border-radius:50%;flex-shrink:0;
+  background:linear-gradient(135deg,#2563eb,#3b82f6);
+  display:flex;align-items:center;justify-content:center;font-size:18px;
 }
-.chead-name{font-size:13px;font-weight:800;color:#0f172a;}
-.chead-sub{font-size:10px;color:#64748b;margin-top:1px;}
+.chead-name{font-size:14px;font-weight:700;color:#111827;}
+.chead-sub{font-size:11px;color:#6b7280;margin-top:2px;}
 .chead-status{
   display:inline-flex;align-items:center;gap:4px;
-  background:#f0fdf4;border:1px solid #bbf7d0;color:#16a34a;
-  font-size:9px;font-weight:700;padding:2px 8px;border-radius:99px;
-  text-transform:uppercase;letter-spacing:.3px;
+  color:#16a34a;font-size:10px;font-weight:600;
+  margin-top:2px;
 }
-.chead-dot{width:4px;height:4px;border-radius:50%;background:#22c55e;
-  animation:pulse 1.6s infinite;}
+.chead-dot{width:6px;height:6px;border-radius:50%;background:#22c55e;
+  animation:pulse 1.8s infinite;}
 .chead-rt{text-align:right;}
-.chead-rt-lbl{font-size:9px;color:#94a3b8;text-transform:uppercase;letter-spacing:.4px;}
-.chead-rt-val{font-size:11px;font-weight:700;color:#16a34a;}
+.chead-rt-lbl{font-size:9.5px;color:#9ca3af;text-transform:uppercase;letter-spacing:.4px;}
+.chead-rt-val{font-size:11.5px;font-weight:600;color:#374151;margin-top:2px;}
 
-/* ── INPUT BAR ── */
-.cinput{
-  background:#f8faff;border-top:1.5px solid #f1f5f9;
-  padding:10px 14px;
-}
-
-/* ── INPUT BOX ── */
+/* ── INPUT BAR (ChatPDF style) ── */
+.cinput{background:#f9fafb;border-top:1px solid #f3f4f6;padding:10px 14px;}
 .input-box{
-  background:#fff;border:1.5px solid #dbeafe;border-radius:14px;
-  padding:6px 8px;display:flex;align-items:flex-end;gap:6px;
-  box-shadow:0 1px 6px rgba(99,102,241,.08);transition:.2s;
+  background:#ffffff;border:1.5px solid #e5e7eb;border-radius:14px;
+  padding:8px 10px 8px 14px;display:flex;align-items:flex-end;gap:8px;
+  box-shadow:0 1px 4px rgba(0,0,0,.05);transition:.18s;
 }
-.input-box:focus-within{border-color:#3b82f6!important;
-  box-shadow:0 2px 14px rgba(59,130,246,.15)!important;}
+.input-box:focus-within{
+  border-color:#2563eb!important;
+  box-shadow:0 0 0 3px rgba(37,99,235,.08)!important;
+}
 
 /* ── INPUT TEXT AREA ── */
 .input-bar .stTextArea textarea{
   background:transparent!important;border:none!important;
-  color:#0f172a!important;font-size:13px!important;
-  line-height:1.5!important;resize:none!important;
+  color:#111827!important;font-size:14px!important;
+  line-height:1.55!important;resize:none!important;
   box-shadow:none!important;outline:none!important;padding:6px 4px!important;
+  font-family:-apple-system,BlinkMacSystemFont,'Segoe UI','Inter',sans-serif!important;
 }
-.input-bar .stTextArea textarea::placeholder{color:#94a3b8!important;font-size:13px!important;}
+.input-bar .stTextArea textarea::placeholder{color:#9ca3af!important;font-size:13.5px!important;}
 .input-bar .stTextArea textarea:focus{box-shadow:none!important;border:none!important;}
 .input-bar div[data-baseweb="textarea"]{background:transparent!important;border:none!important;}
 .input-bar .stTextArea label{display:none!important;}
@@ -203,9 +206,11 @@ div[data-testid="stFileUploader"]{min-height:0!important;}
 div[data-testid="stFileUploader"]>label{display:none!important;}
 section[data-testid="stFileUploaderDropzone"]{
   min-height:38px!important;max-height:38px!important;padding:0 4px!important;
-  border:1.5px solid #bfdbfe!important;background:#eff6ff!important;
+  border:1.5px solid #e5e7eb!important;background:#f9fafb!important;
   border-radius:10px!important;display:flex!important;align-items:center!important;
-  justify-content:center!important;overflow:hidden!important;}
+  justify-content:center!important;overflow:hidden!important;transition:.18s!important;}
+section[data-testid="stFileUploaderDropzone"]:hover{
+  border-color:#2563eb!important;background:#eff6ff!important;}
 section[data-testid="stFileUploaderDropzone"]>div{
   flex-direction:row!important;gap:0!important;align-items:center!important;
   width:100%!important;justify-content:center!important;}
@@ -220,7 +225,7 @@ section[data-testid="stFileUploaderDropzone"] button::before{
 div[data-testid="stFileUploader"] small{display:none!important;}
 [data-testid="stFileUploaderDeleteBtn"]{color:#dc2626!important;}
 div[data-testid="stFileUploader"] [data-testid="stFileUploaderFile"]{
-  font-size:10px!important;max-width:100px!important;overflow:hidden!important;
+  font-size:10px!important;max-width:110px!important;overflow:hidden!important;
   white-space:nowrap!important;text-overflow:ellipsis!important;}
 
 /* ── HOME FILE UPLOADER ── */
@@ -228,90 +233,110 @@ div[data-testid="stFileUploader"] [data-testid="stFileUploaderFile"]{
   font-size:12px!important;font-weight:600!important;color:#374151!important;
   margin-bottom:4px!important;display:block!important;}
 .home-upload section[data-testid="stFileUploaderDropzone"]{
-  border:2px dashed #93c5fd!important;background:#f0f7ff!important;
+  border:2px dashed #d1d5db!important;background:#f9fafb!important;
   border-radius:12px!important;padding:16px!important;
   min-height:auto!important;max-height:none!important;}
 .home-upload section[data-testid="stFileUploaderDropzone"] button{
-  background:linear-gradient(135deg,#1e40af,#3b82f6)!important;
-  color:#fff!important;border:none!important;border-radius:7px!important;
-  font-size:12px!important;font-weight:700!important;padding:6px 14px!important;
-  cursor:pointer!important;width:auto!important;height:auto!important;}
+  background:#2563eb!important;color:#fff!important;border:none!important;
+  border-radius:8px!important;font-size:12px!important;font-weight:600!important;
+  padding:6px 14px!important;cursor:pointer!important;
+  width:auto!important;height:auto!important;}
 
-/* ── SEND BUTTON ── */
+/* ── SEND BUTTON (circular, ChatPDF style) ── */
 .stFormSubmitButton button{
-  background:linear-gradient(135deg,#1e40af,#3b82f6)!important;
-  color:#fff!important;border:none!important;border-radius:10px!important;
-  font-weight:700!important;box-shadow:0 2px 10px rgba(37,99,235,.3)!important;
-  transition:all .18s!important;
+  background:#2563eb!important;color:#fff!important;border:none!important;
+  border-radius:50%!important;font-weight:700!important;
+  box-shadow:0 2px 8px rgba(37,99,235,.30)!important;transition:all .18s!important;
 }
 .stFormSubmitButton button:hover{
-  box-shadow:0 4px 16px rgba(37,99,235,.45)!important;transform:translateY(-1px)!important;}
+  background:#1d4ed8!important;
+  box-shadow:0 4px 14px rgba(37,99,235,.40)!important;transform:scale(1.06)!important;}
 .input-bar .stFormSubmitButton button{
-  height:38px!important;width:38px!important;padding:0!important;
-  font-size:18px!important;min-height:0!important;border-radius:10px!important;}
+  height:40px!important;width:40px!important;padding:0!important;
+  font-size:16px!important;min-height:0!important;border-radius:50%!important;}
 
 /* ── BUTTONS ── */
 .stButton>button{
-  border-radius:10px!important;font-weight:600!important;font-size:12px!important;
-  padding:7px 16px!important;transition:all .18s!important;
-  min-height:34px!important;line-height:1.2!important;
+  border-radius:10px!important;font-weight:600!important;font-size:13px!important;
+  padding:8px 18px!important;transition:all .18s!important;
+  min-height:36px!important;line-height:1.2!important;
 }
 .stButton>button[kind="primary"],button[kind="primary"]{
-  background:linear-gradient(135deg,#1e40af,#3b82f6)!important;
-  color:#fff!important;border:none!important;
-  box-shadow:0 2px 10px rgba(37,99,235,.28)!important;}
+  background:#2563eb!important;color:#fff!important;border:none!important;
+  box-shadow:0 2px 8px rgba(37,99,235,.25)!important;}
 .stButton>button[kind="primary"]:hover{
-  box-shadow:0 4px 16px rgba(37,99,235,.42)!important;transform:translateY(-1px)!important;}
+  background:#1d4ed8!important;
+  box-shadow:0 4px 14px rgba(37,99,235,.38)!important;transform:translateY(-1px)!important;}
 .stButton>button:not([kind="primary"]){
-  background:#fff!important;color:#1e40af!important;
-  border:1.5px solid #bfdbfe!important;}
+  background:#fff!important;color:#374151!important;
+  border:1.5px solid #d1d5db!important;}
 .stButton>button:not([kind="primary"]):hover{
-  background:#eff6ff!important;border-color:#3b82f6!important;transform:translateY(-1px)!important;}
+  background:#f9fafb!important;border-color:#9ca3af!important;transform:translateY(-1px)!important;}
 
 /* ── FORM INPUTS ── */
 .stTextArea label,.stTextInput label{
   font-size:12px!important;font-weight:600!important;color:#374151!important;}
 .stTextInput>div>div>input,.stTextArea>div>div>textarea{
-  background:#fff!important;color:#0f172a!important;
-  border:1.5px solid #c7d2fe!important;border-radius:10px!important;font-size:13px!important;}
+  background:#ffffff!important;color:#111827!important;
+  border:1.5px solid #d1d5db!important;border-radius:10px!important;font-size:13px!important;
+  font-family:-apple-system,BlinkMacSystemFont,'Segoe UI','Inter',sans-serif!important;}
 .stTextInput>div>div>input:focus,.stTextArea>div>div>textarea:focus{
-  border-color:#3b82f6!important;box-shadow:0 0 0 3px rgba(59,130,246,.1)!important;}
+  border-color:#2563eb!important;box-shadow:0 0 0 3px rgba(37,99,235,.1)!important;}
 [data-testid="stAlert"]{border-radius:12px!important;}
 
-/* ── LOGIN CARD ── */
-.login-wrap{max-width:500px;margin:20px auto;}
+/* ── SELECT BOX ── */
+.stSelectbox>div>div{
+  border:1.5px solid #d1d5db!important;border-radius:10px!important;
+  background:#fff!important;font-size:13px!important;}
+.stSelectbox>div>div:focus-within{border-color:#2563eb!important;}
+
+/* ── LOGIN / INTRO CARD ── */
+.login-wrap{max-width:480px;margin:20px auto;}
 .login-banner{
-  background:linear-gradient(135deg,#1e3a8a,#1e40af,#0ea5e9);
-  border-radius:18px 18px 0 0;padding:28px 28px 22px;text-align:center;}
-.login-icon{font-size:44px;margin-bottom:8px;}
-.login-title{font-size:20px;font-weight:900;color:#fff;letter-spacing:-.3px;}
-.login-sub{font-size:12px;color:rgba(255,255,255,.7);margin-top:5px;}
+  background:linear-gradient(135deg,#1e3a8a,#2563eb,#0ea5e9);
+  border-radius:16px 16px 0 0;padding:32px 28px 24px;text-align:center;}
+.login-icon{font-size:44px;margin-bottom:10px;}
+.login-title{font-size:20px;font-weight:800;color:#fff;letter-spacing:-.3px;}
+.login-sub{font-size:12px;color:rgba(255,255,255,.72);margin-top:5px;}
 .login-chips{display:flex;justify-content:center;gap:6px;flex-wrap:wrap;margin-top:12px;}
-.chip{font-size:10px;font-weight:700;padding:4px 11px;border-radius:99px;
+.chip{font-size:10px;font-weight:600;padding:4px 12px;border-radius:99px;
   background:rgba(255,255,255,.15);border:1px solid rgba(255,255,255,.25);color:#fff;}
 .login-body{
-  background:#fff;border-radius:0 0 18px 18px;
-  border:1.5px solid #e0e7ff;border-top:none;padding:22px 28px;}
+  background:#fff;border-radius:0 0 16px 16px;
+  border:1px solid #e5e7eb;border-top:none;padding:24px 28px;}
 
 /* ── TICKET ── */
-.ticket-card{background:#fff;border:1.5px solid #bfdbfe;border-radius:18px;
-  box-shadow:0 4px 20px rgba(30,64,175,.08);padding:20px 24px;margin:12px auto;max-width:460px;}
-.ticket-id{font-size:10px;font-weight:700;color:#1e40af;letter-spacing:.5px;text-transform:uppercase;}
-.ticket-num{font-size:22px;font-weight:900;color:#0f172a;margin:3px 0 12px;}
-.ticket-row{display:flex;gap:8px;align-items:flex-start;margin-bottom:6px;font-size:12px;}
-.ticket-lbl{color:#64748b;min-width:70px;flex-shrink:0;}
-.ticket-val{color:#0f172a;font-weight:600;word-break:break-all;}
+.ticket-card{
+  background:#fff;border:1px solid #e5e7eb;border-radius:16px;
+  box-shadow:0 4px 20px rgba(0,0,0,.07);padding:20px 24px;
+  margin:12px auto;max-width:480px;}
+.ticket-id{font-size:10px;font-weight:600;color:#2563eb;letter-spacing:.5px;
+  text-transform:uppercase;}
+.ticket-num{font-size:22px;font-weight:800;color:#111827;margin:4px 0 12px;}
+.ticket-row{display:flex;gap:10px;align-items:flex-start;margin-bottom:6px;font-size:12.5px;}
+.ticket-lbl{color:#6b7280;min-width:70px;flex-shrink:0;}
+.ticket-val{color:#111827;font-weight:600;word-break:break-all;}
 .ticket-link{
-  display:inline-flex;align-items:center;gap:5px;margin-top:12px;
-  background:linear-gradient(135deg,#1e40af,#3b82f6);color:#fff!important;
-  text-decoration:none;font-size:12px;font-weight:700;
-  padding:7px 18px;border-radius:10px;box-shadow:0 3px 12px rgba(30,64,175,.28);}
-.badge-new{display:inline-block;background:#dbeafe;color:#1e40af;
+  display:inline-flex;align-items:center;gap:6px;margin-top:12px;
+  background:#2563eb;color:#fff!important;
+  text-decoration:none;font-size:12.5px;font-weight:600;
+  padding:8px 18px;border-radius:9px;box-shadow:0 2px 8px rgba(37,99,235,.28);}
+.badge-new{display:inline-block;background:#eff6ff;color:#2563eb;
   font-size:9px;font-weight:700;padding:2px 8px;border-radius:99px;
   text-transform:uppercase;letter-spacing:.4px;}
 
+/* ── SUPPORT LEVEL ROW ── */
+.support-level-row{
+  display:flex;align-items:center;gap:10px;padding:8px 4px 4px;
+}
+.support-level-label{
+  font-size:11.5px;color:#6b7280;font-weight:600;white-space:nowrap;
+}
+
 @keyframes fadeUp{from{opacity:0;transform:translateY(8px)}to{opacity:1;transform:translateY(0)}}
 .anim{animation:fadeUp .3s ease both;}
+@keyframes scaleIn{from{opacity:0;transform:scale(.96)}to{opacity:1;transform:scale(1)}}
+.anim-scale{animation:scaleIn .28s ease both;}
 </style>
 """, unsafe_allow_html=True)
 
@@ -320,7 +345,7 @@ div[data-testid="stFileUploader"] [data-testid="stFileUploaderFile"]{
 # ═══════════════════════════════════════════════════════════
 def _init_state():
     defaults = {
-        "page":                    "chat",
+        "page":                    "intro",
         "user":                    {"name": "Guest", "email": ""},
         "messages":                [],
         "issue_text":              "",
@@ -340,6 +365,7 @@ def _init_state():
         "help_count":              0,
         "chat_started":            False,
         "sf_diagnosis":            "",
+        "turn_count":              0,
     }
     for k, v in defaults.items():
         if k not in st.session_state:
@@ -820,9 +846,14 @@ def _ask_groq(
 
         messages = [{"role": "system", "content": system_prompt}]
         if history:
-            for msg in history[-10:]:
+            # Exclude the last message if it's a user message — it's added as user_prompt below
+            hist = history[-10:]
+            for i, msg in enumerate(hist):
                 role    = msg.get("role", "")
                 content = msg.get("content", "")
+                # Skip the last entry if it duplicates the current user_prompt
+                if i == len(hist) - 1 and role == "user" and content.strip() == user_prompt.strip():
+                    continue
                 if role in ("user", "assistant") and content:
                     messages.append({"role": role, "content": str(content)[:800]})
         messages.append({"role": "user", "content": user_prompt})
@@ -852,7 +883,9 @@ def _ask_groq(
             max_tokens=max_tokens, temperature=0.7,
         )
         return (completion.choices[0].message.content or "").strip()
-    except Exception:
+    except Exception as e:
+        import traceback
+        print(f"[Groq error] {e}\n{traceback.format_exc()}")
         return _ask_claude_fallback(system_prompt, user_prompt, max_tokens, history, fast, stream)
 
 
@@ -892,7 +925,9 @@ def _ask_claude_fallback(system_prompt, user_prompt, max_tokens, history, fast, 
         r = client.messages.create(model=model, system=system_prompt,
                                    messages=msgs, max_tokens=max_tokens, temperature=0.45)
         return (r.content[0].text or "") if r.content else ""
-    except Exception:
+    except Exception as e:
+        import traceback
+        print(f"[Claude fallback error] {e}\n{traceback.format_exc()}")
         return _ask_openai_fallback(system_prompt, user_prompt, max_tokens, history, fast)
 
 
@@ -913,7 +948,9 @@ def _ask_openai_fallback(system_prompt, user_prompt, max_tokens, history, fast):
         r = client.chat.completions.create(model=model, messages=msgs,
                                            max_tokens=max_tokens, temperature=0.45)
         return (r.choices[0].message.content or "").strip()
-    except Exception:
+    except Exception as e:
+        import traceback
+        print(f"[OpenAI fallback error] {e}\n{traceback.format_exc()}")
         return ""
 
 
@@ -1091,67 +1128,94 @@ from jinja2 import Template as _JTmpl
 _CHAT_CSS = """
 <style>
 *{box-sizing:border-box;margin:0;padding:0;}
-html,body{background:#f8faff;font-family:-apple-system,BlinkMacSystemFont,'Segoe UI',sans-serif;}
-.msgs{
-  height:420px;overflow-y:auto;overflow-x:hidden;
-  padding:16px 14px 8px;
-  scrollbar-width:thin;scrollbar-color:#c7d2fe #f8faff;
-  background:#f8faff;
+html,body{
+  background:#f9fafb;
+  font-family:-apple-system,BlinkMacSystemFont,'Segoe UI','Inter',sans-serif;
 }
-.msgs::-webkit-scrollbar{width:3px;}
-.msgs::-webkit-scrollbar-thumb{background:#c7d2fe;border-radius:3px;}
+.msgs{
+  height:560px;overflow-y:auto;overflow-x:hidden;
+  padding:24px 20px 12px;
+  scrollbar-width:thin;scrollbar-color:#d1d5db #f9fafb;
+  background:#f9fafb;
+}
+.msgs::-webkit-scrollbar{width:4px;}
+.msgs::-webkit-scrollbar-thumb{background:#d1d5db;border-radius:4px;}
 .msgs::-webkit-scrollbar-track{background:transparent;}
-.row{display:flex;align-items:flex-end;gap:8px;margin-bottom:12px;}
+/* message rows */
+.row{display:flex;align-items:flex-start;gap:12px;margin-bottom:20px;}
 .row.u{flex-direction:row-reverse;}
-.av{width:30px;height:30px;border-radius:50%;flex-shrink:0;
-    display:flex;align-items:center;justify-content:center;font-size:14px;}
-.av.a{background:linear-gradient(135deg,#1e40af,#3b82f6);}
-.av.u{background:linear-gradient(135deg,#7c3aed,#a855f7);}
+/* avatars */
+.av{width:34px;height:34px;border-radius:50%;flex-shrink:0;margin-top:2px;
+    display:flex;align-items:center;justify-content:center;font-size:14px;font-weight:700;}
+.av.a{background:#2563eb;color:#fff;}
+.av.u{background:#111827;color:#fff;font-size:12px;}
 @keyframes avIn{from{opacity:0;transform:scale(.5)}to{opacity:1;transform:scale(1)}}
-.row.new .av{animation:avIn .25s cubic-bezier(.34,1.56,.64,1) both;}
-.bub{max-width:80%;padding:10px 14px;font-size:13px;line-height:1.7;word-break:break-word;}
-.bub.a{background:#fff;border:1.5px solid #e0e7ff;color:#1e293b;
-       border-radius:4px 16px 16px 16px;box-shadow:0 1px 6px rgba(99,102,241,.08);}
-.bub.u{background:linear-gradient(135deg,#1e40af,#2563eb);color:#fff;
-       border-radius:16px 4px 16px 16px;box-shadow:0 2px 12px rgba(37,99,235,.28);}
-@keyframes botIn{from{opacity:0;transform:translateX(-16px) translateY(6px)}to{opacity:1;transform:none}}
-@keyframes usrIn{from{opacity:0;transform:translateX(16px) translateY(6px)}to{opacity:1;transform:none}}
-.row.new.a .bub{animation:botIn .35s cubic-bezier(.22,.68,0,1.12) both;}
-.row.new.u .bub{animation:usrIn .3s cubic-bezier(.22,.68,0,1.12) both;}
-.bub p{margin:0 0 6px;}.bub p:last-child{margin-bottom:0;}
-.bub ol,.bub ul{margin:6px 0 6px 18px;}.bub li{margin-bottom:5px;line-height:1.6;}
-.bub strong{color:#1d4ed8;}.bub.u strong{color:#bfdbfe;}
-.bub code{background:#eff6ff;color:#2563eb;padding:1px 6px;border-radius:4px;font-size:12px;font-family:monospace;}
-.bub.u code{background:rgba(255,255,255,.2);color:#e0f2fe;}
-.bub hr{border:none;border-top:1px solid #e0e7ff;margin:8px 0;}
-.vstep{background:#f1f5ff;border:1px solid #dbeafe;border-radius:10px;padding:9px 12px;margin:5px 0;font-size:12px;}
-.vstep-num{display:inline-flex;align-items:center;justify-content:center;
-  width:20px;height:20px;border-radius:50%;
-  background:linear-gradient(135deg,#1e40af,#3b82f6);
-  color:#fff;font-size:10px;font-weight:700;margin-right:7px;flex-shrink:0;}
+.row.new .av{animation:avIn .25s ease both;}
+/* bubbles */
+.bub{
+  max-width:76%;padding:12px 16px;font-size:13.5px;
+  line-height:1.75;word-break:break-word;
+}
+.bub.a{
+  background:#ffffff;border:1px solid #e5e7eb;color:#111827;
+  border-radius:4px 16px 16px 16px;
+  box-shadow:0 1px 3px rgba(0,0,0,.06);
+}
+.bub.u{
+  background:#111827;color:#f9fafb;
+  border-radius:16px 4px 16px 16px;
+}
+@keyframes botIn{from{opacity:0;transform:translateX(-12px)}to{opacity:1;transform:none}}
+@keyframes usrIn{from{opacity:0;transform:translateX(12px)}to{opacity:1;transform:none}}
+.row.new.a .bub{animation:botIn .28s ease both;}
+.row.new.u .bub{animation:usrIn .24s ease both;}
+/* bubble text */
+.bub p{margin:0 0 8px;}.bub p:last-child{margin-bottom:0;}
+.bub ol,.bub ul{margin:8px 0 8px 20px;}.bub li{margin-bottom:6px;line-height:1.7;}
+.bub strong{color:#1d4ed8;font-weight:700;}.bub.u strong{color:#93c5fd;}
+.bub code{background:#f3f4f6;color:#1d4ed8;padding:2px 6px;border-radius:4px;font-size:12px;font-family:'SFMono-Regular',Consolas,monospace;}
+.bub.u code{background:rgba(255,255,255,.12);color:#bfdbfe;}
+.bub hr{border:none;border-top:1px solid #f3f4f6;margin:10px 0;}
+/* step cards */
+.vstep{
+  background:#f9fafb;border:1px solid #e5e7eb;border-left:3px solid #2563eb;
+  border-radius:0 10px 10px 10px;
+  padding:10px 14px;margin:7px 0;font-size:13px;
+}
+.vstep-num{
+  display:inline-flex;align-items:center;justify-content:center;
+  width:22px;height:22px;border-radius:50%;
+  background:#2563eb;color:#fff;font-size:10px;font-weight:700;
+  margin-right:9px;flex-shrink:0;
+}
 .vstep-row{display:flex;align-items:flex-start;}
 .vstep-body{flex:1;}
-.vstep-action{font-weight:700;color:#0f172a;margin-bottom:2px;}
-.vstep-why{font-size:11px;color:#64748b;margin-bottom:4px;}
+.vstep-action{font-weight:700;color:#111827;margin-bottom:3px;font-size:13px;}
+.vstep-why{font-size:12px;color:#6b7280;margin-bottom:4px;line-height:1.65;}
 .vpath{display:flex;align-items:center;flex-wrap:wrap;gap:3px;
-  background:#1e293b;border-radius:6px;padding:6px 10px;margin-top:3px;}
-.vpath-seg{color:#94a3b8;font-family:monospace;font-size:11px;}
-.vpath-sep{color:#475569;margin:0 1px;}
-.vpath-seg.file{color:#7dd3fc;font-weight:600;}
-.vcode{background:#1e293b;border-radius:6px;padding:7px 10px;margin-top:4px;
-  font-family:monospace;font-size:11px;color:#e2e8f0;white-space:pre-wrap;border-left:3px solid #3b82f6;}
+  background:#1f2937;border-radius:6px;padding:7px 10px;margin-top:4px;}
+.vpath-seg{color:#9ca3af;font-family:'SFMono-Regular',Consolas,monospace;font-size:11px;}
+.vpath-sep{color:#4b5563;margin:0 1px;}
+.vpath-seg.file{color:#7dd3fc;font-weight:700;}
+.vcode{
+  background:#1f2937;border-radius:6px;padding:8px 12px;margin-top:4px;
+  font-family:'SFMono-Regular',Consolas,monospace;font-size:11.5px;
+  color:#e5e7eb;white-space:pre-wrap;border-left:3px solid #2563eb;
+}
 .vcode .ck{color:#7dd3fc;}.vcode .cv{color:#86efac;}
+/* typing indicator */
 @keyframes db{0%,60%,100%{transform:translateY(0);opacity:.3}30%{transform:translateY(-5px);opacity:1}}
 @keyframes tIn{from{opacity:0;transform:translateX(-10px)}to{opacity:1;transform:none}}
-.qtyping-row{display:flex;align-items:flex-end;gap:8px;margin-bottom:10px;animation:tIn .25s ease both;}
-.qtyping-av{width:30px;height:30px;border-radius:50%;background:linear-gradient(135deg,#1e40af,#3b82f6);
-  display:flex;align-items:center;justify-content:center;font-size:14px;flex-shrink:0;}
-.qtyping-bubble{background:#fff;border:1.5px solid #e0e7ff;border-radius:4px 16px 16px 16px;
-  box-shadow:0 1px 6px rgba(99,102,241,.08);padding:10px 14px;display:flex;gap:4px;align-items:center;}
-.qtyping-bubble span{width:6px;height:6px;border-radius:50%;background:#94a3b8;
+.qtyping-row{display:flex;align-items:flex-end;gap:12px;margin-bottom:14px;animation:tIn .22s ease both;}
+.qtyping-av{width:34px;height:34px;border-radius:50%;background:#2563eb;
+  display:flex;align-items:center;justify-content:center;font-size:15px;flex-shrink:0;}
+.qtyping-bubble{background:#ffffff;border:1px solid #e5e7eb;
+  border-radius:4px 16px 16px 16px;box-shadow:0 1px 3px rgba(0,0,0,.06);
+  padding:12px 16px;display:flex;gap:5px;align-items:center;}
+.qtyping-bubble span{width:7px;height:7px;border-radius:50%;background:#9ca3af;
   display:inline-block;animation:db 1.1s infinite ease-in-out;}
-.qtyping-bubble span:nth-child(2){animation-delay:.15s;}
-.qtyping-bubble span:nth-child(3){animation-delay:.3s;}
+.qtyping-bubble span:nth-child(2){animation-delay:.16s;}
+.qtyping-bubble span:nth-child(3){animation-delay:.32s;}
 </style>
 """
 
@@ -1172,24 +1236,32 @@ _CHAT_TMPL = _JTmpl("""
 
 _TYPING_HTML = """
 <style>
-@keyframes typingFade{from{opacity:0;transform:translateX(-14px) translateY(6px);}to{opacity:1;transform:none;}}
-@keyframes dotBounce{0%,60%,100%{transform:translateY(0);opacity:.35;}30%{transform:translateY(-7px);opacity:1;}}
-.qtyping-row{display:flex;align-items:flex-start;gap:10px;padding:4px 0 8px;animation:typingFade .3s ease both;}
-.qtyping-av{width:36px;height:36px;border-radius:50%;flex-shrink:0;
-            background:linear-gradient(135deg,#2563eb,#0ea5e9);
-            display:flex;align-items:center;justify-content:center;font-size:17px;}
-.qtyping-bubble{background:#fff;border:1px solid #e2e8f0;
-                border-radius:4px 18px 18px 18px;
-                box-shadow:0 2px 12px rgba(0,0,0,.07);
-                padding:16px 20px;display:flex;gap:6px;align-items:center;}
-.qtyping-bubble span{width:8px;height:8px;border-radius:50%;background:#94a3b8;
-                     display:inline-block;animation:dotBounce 1.1s infinite ease-in-out;}
-.qtyping-bubble span:nth-child(2){animation-delay:.18s;}
-.qtyping-bubble span:nth-child(3){animation-delay:.36s;}
+@keyframes typingFade{from{opacity:0;transform:translateX(-16px) translateY(8px);}to{opacity:1;transform:none;}}
+@keyframes dotBounce{0%,60%,100%{transform:translateY(0);opacity:.3;}30%{transform:translateY(-8px);opacity:1;}}
+.qt-row{display:flex;align-items:flex-end;gap:10px;padding:6px 16px 10px;animation:typingFade .32s ease both;}
+.qt-av{
+  width:34px;height:34px;border-radius:50%;flex-shrink:0;
+  background:linear-gradient(135deg,#1e40af,#3b82f6);
+  display:flex;align-items:center;justify-content:center;font-size:17px;
+  box-shadow:0 2px 10px rgba(59,130,246,.34);
+}
+.qt-bubble{
+  background:#fff;
+  border:1.5px solid rgba(99,102,241,.14);
+  border-radius:4px 18px 18px 18px;
+  box-shadow:0 2px 12px rgba(99,102,241,.09);
+  padding:13px 18px;display:flex;gap:6px;align-items:center;
+}
+.qt-bubble span{
+  width:8px;height:8px;border-radius:50%;background:#a5b4fc;
+  display:inline-block;animation:dotBounce 1.15s infinite ease-in-out;
+}
+.qt-bubble span:nth-child(2){animation-delay:.18s;}
+.qt-bubble span:nth-child(3){animation-delay:.36s;}
 </style>
-<div class="qtyping-row">
-  <div class="qtyping-av">🤖</div>
-  <div class="qtyping-bubble"><span></span><span></span><span></span></div>
+<div class="qt-row">
+  <div class="qt-av">🤖</div>
+  <div class="qt-bubble"><span></span><span></span><span></span></div>
 </div>
 """
 
@@ -1560,36 +1632,71 @@ def process_chat(text: str, history: list, file_data: dict = None) -> str:
             + "\n=== END ===\n"
         )
 
+    # Determine how many user turns have happened so far
+    user_turn = sum(1 for m in history if m.get("role") == "user")
+    st.session_state.turn_count = user_turn
+
+    if user_turn <= 1:
+        conversation_style = """
+
+=== PHASE 1 — UNDERSTAND BEFORE SOLVING ===
+The user has just sent their FIRST message. Your job right now is to understand the problem,
+NOT to provide solutions or troubleshooting steps yet.
+
+Respond with:
+  1. A brief, warm acknowledgment of what they said (1 sentence max).
+  2. Then ask 2–3 focused clarifying questions (bullet list), such as:
+     • Which exact product are they using? (CTM / Certify / Portal / Capture) — skip if already stated.
+     • What exact error message or behaviour are they seeing?
+     • What have they already tried, if anything?
+
+Keep the response SHORT, friendly, and conversational.
+DO NOT give any steps, fixes, or solutions in this turn — that comes after you understand the issue.
+"""
+    else:
+        conversation_style = """
+
+=== PHASE 2 — RESOLVE THE ISSUE ===
+CONVERSATION STYLE:
+- Be warm, direct, and concise — like a knowledgeable colleague
+- For technical Worksoft issues: give numbered steps (1. **Action** — reason)
+- For general questions: answer naturally, no steps needed
+- Keep follow-up replies SHORT (2-4 sentences) — this is a chat, not a report
+- After giving steps, always invite the user: "Let me know what happens! 👇"
+- If the user says the issue is fixed → celebrate briefly, suggest clicking ✅ Resolved at L1
+- Never mention Salesforce case IDs or database internals to the user
+"""
+
     system_prompt = (
         f"{_EXPERT_PERSONA}\n\n"
         f"{_WORKSOFT_DOMAIN}"
         + sf_section
-        + """
+        + f"""
 
 You are a smart, conversational AI support assistant for Worksoft products at Qualesce.
 You can answer ANY question the user asks.
 Your PRIMARY knowledge source is the Salesforce resolved cases above — always use them when available.
 For questions outside Worksoft, answer naturally from your general knowledge.
-
-CONVERSATION STYLE:
-- Be warm, direct, and concise — like a knowledgeable colleague
-- For technical Worksoft issues: give numbered steps (1. **Action** — reason)
-- For general questions: just answer naturally, no steps needed
-- Keep follow-up replies SHORT (2-4 sentences) — this is a chat, not a report
-- After giving steps, always invite the user to reply: "Let me know what happens! 👇"
-- If the user says the issue is fixed → celebrate briefly, suggest clicking ✅ Resolved at L1
-- Never mention Salesforce case IDs or database internals to the user
-"""
+{conversation_style}"""
     )
 
     # ── Stream Groq response ───────────────────────────────────
+    # Guard: surface a clear message if no LLM key is configured at all
+    if not GROQ_API_KEY and not ANTHROPIC_API_KEY and not OPENAI_API_KEY:
+        return (
+            "⚠️ **No AI API key is configured.**\n\n"
+            "Please add your `GROQ_API_KEY` (or `ANTHROPIC_API_KEY` / `OPENAI_API_KEY`) "
+            "to `.streamlit/secrets.toml` and restart the app.\n\n"
+            "Get a free Groq key at **console.groq.com** — it takes under a minute."
+        )
+
     reply = _ask_ai(
         system_prompt=system_prompt,
         user_prompt=query,
         history=history,
         max_tokens=900,
         stream=True,
-    ) or "I'm having trouble generating a response right now. Could you rephrase or try again?"
+    ) or "I'm having trouble connecting to the AI right now. Please check your API key in `.streamlit/secrets.toml` and restart."
 
     st.session_state.chat_phase = "resolving"
 
@@ -1654,10 +1761,11 @@ def render_navbar():
     <div class="nav-logo">🤖</div>
     <div>
       <div class="nav-title">Worksoft AI Support</div>
-      <div class="nav-sub">Qualesce · Salesforce Knowledge</div>
+      <div class="nav-sub">Qualesce &nbsp;·&nbsp; Salesforce Knowledge Base</div>
     </div>
   </div>
   <div class="nav-right">
+    <div class="nav-divider"></div>
     <span class="nav-pill">● Online</span>
   </div>
 </div>""")
@@ -1675,7 +1783,7 @@ def _render_left_panel(col):
     cnt  = info.get("case_count", 0)
     last = info.get("last_sync", "")[:16].replace("T", " ") if info.get("last_sync") else "Never"
     feats = "".join([
-        f'<div class="lp-feature"><span style="font-size:14px;">{i}</span>{l}</div>'
+        f'<div class="lp-feature"><span class="lp-feat-icon">{i}</span>{l}</div>'
         for i, l in [("🔍","Smart AI search"),("📎","File & screenshot"),
                      ("🎫","Auto ticket"),("📧","Admin notify")]
     ])
@@ -1716,14 +1824,7 @@ def _render_left_panel(col):
 
 
 def render_chat():
-    render_navbar()
-
-    # ── Two-column layout ───────────────────────────────────
-    left_col, right_col = st.columns([1, 2.6], gap="large")
-    _render_left_panel(left_col)
-
-    with right_col:
-        _live_chat()
+    _live_chat()
 
 
 @st.dialog("Support Level Check 🔔")
@@ -1795,30 +1896,73 @@ def _live_chat():
     # ── Auto-welcome on very first load ──────────────────────
     if not st.session_state.get("chat_started"):
         st.session_state.chat_started = True
+        _first_name = (st.session_state.get("user", {}).get("name") or "there").split()[0]
         welcome = (
-            "Hi there! I'm your **Worksoft AI Support Assistant** — "
-            "my answers are sourced directly from Salesforce resolved cases and our knowledge base.\n\n"
-            "I'll walk you through fixes **one step at a time** so nothing gets missed. "
-            "Just tell me what's going on — or attach a screenshot, log file, or PDF using the 📎 icon.\n\n"
-            "Which Worksoft product are you having trouble with? *(CTM, Certify, Portal, or Capture)*"
+            f"Hello, **{_first_name}**! 👋 I'm your **Worksoft AI Support Assistant**, "
+            f"powered by real resolved cases from our Salesforce knowledge base.\n\n"
+            "I'm here to help with **CTM, Certify, Portal, and Capture** — and I'll make sure I fully understand your issue before suggesting any fix.\n\n"
+            "Go ahead and describe what's happening. You can also attach a **screenshot, log file, or PDF** using the 📎 icon below."
         )
         st.session_state.messages.append({"role": "assistant", "content": welcome})
 
-    # ── Chat window header ───────────────────────────────────
+    # ── Full-width chat top bar ──────────────────────────────
+    _user  = st.session_state.get("user", {})
+    _uname = _user.get("name", "Guest")
+    _uemail = _user.get("email", "")
+    _initials = (_uname[0].upper()) if _uname and _uname != "Guest" else "G"
+    _user_tag = _uname + (f" &nbsp;&middot;&nbsp; {_uemail}" if _uemail else "")
     st.html(f"""
-<div class="cwin">
-  <div class="chead">
-    <div class="chead-left">
-      <div class="chead-av">🤖</div>
-      <div>
-        <div class="chead-name">Qualesce AI Support</div>
-        <div class="chead-sub">CTM · Certify · Portal · Capture</div>
-        <span class="chead-status"><span class="chead-dot"></span>Online</span>
-      </div>
+<style>
+/* Full-width chat page */
+html,body,[data-testid="stAppViewContainer"]{{background:#f9fafb!important;}}
+.block-container{{max-width:860px!important;margin:0 auto!important;padding:0 0 0!important;}}
+/* Top bar */
+.ctop{{
+  display:flex;align-items:center;justify-content:space-between;
+  padding:14px 20px;background:#ffffff;
+  border-bottom:1px solid #e5e7eb;
+  border-radius:16px 16px 0 0;
+  margin-bottom:0;
+}}
+.ctop-left{{display:flex;align-items:center;gap:12px;}}
+.ctop-av{{
+  width:38px;height:38px;border-radius:50%;
+  background:linear-gradient(135deg,#2563eb,#3b82f6);
+  display:flex;align-items:center;justify-content:center;font-size:18px;
+}}
+.ctop-name{{font-size:15px;font-weight:700;color:#111827;}}
+.ctop-sub{{font-size:11px;color:#9ca3af;margin-top:1px;}}
+.ctop-online{{
+  display:inline-flex;align-items:center;gap:5px;
+  font-size:10.5px;font-weight:600;color:#16a34a;margin-top:2px;
+}}
+.ctop-dot{{width:6px;height:6px;border-radius:50%;background:#22c55e;animation:pulse 1.8s infinite;}}
+.ctop-right{{display:flex;align-items:center;gap:8px;}}
+.ctop-user{{
+  display:flex;align-items:center;gap:8px;
+  background:#f3f4f6;border:1px solid #e5e7eb;
+  border-radius:8px;padding:6px 12px;
+}}
+.ctop-user-av{{
+  width:26px;height:26px;border-radius:50%;
+  background:#111827;color:#fff;
+  display:flex;align-items:center;justify-content:center;
+  font-size:11px;font-weight:700;flex-shrink:0;
+}}
+.ctop-user-name{{font-size:12px;font-weight:600;color:#374151;}}
+</style>
+<div class="ctop">
+  <div class="ctop-left">
+    <div class="ctop-av">🤖</div>
+    <div>
+      <div class="ctop-name">Worksoft AI Support</div>
+      <span class="ctop-online"><span class="ctop-dot"></span>Online &amp; Ready</span>
     </div>
-    <div class="chead-rt">
-      <div class="chead-rt-lbl">Response</div>
-      <div class="chead-rt-val">~2-5 sec</div>
+  </div>
+  <div class="ctop-right">
+    <div class="ctop-user">
+      <div class="ctop-user-av">{_initials}</div>
+      <span class="ctop-user-name">{_user_tag}</span>
     </div>
   </div>
 </div>""")
@@ -1870,9 +2014,8 @@ def _live_chat():
 
         # Persistent action buttons always visible after first assistant reply
         st.markdown(
-            '<div style="display:flex;align-items:center;gap:8px;padding:6px 0 2px;">'
-            '<span style="font-size:12px;color:#64748b;font-weight:600;margin-right:4px;">'
-            'Support level:</span>'
+            '<div class="support-level-row">'
+            '<span class="support-level-label">Close ticket:</span>'
             '</div>',
             unsafe_allow_html=True,
         )
@@ -1962,7 +2105,7 @@ def render_resolved():
             st.session_state.session_id = None
             st.session_state.chat_started = False
             _reset_chat_state()
-            st.session_state.page = "chat"; st.rerun()
+            st.session_state.page = "intro"; st.rerun()
 
 
 # ═══════════════════════════════════════════════════════════
@@ -2134,10 +2277,163 @@ def _render_ticket(user, ticket):
             st.session_state.user       = {"name": "Guest", "email": ""}
             st.session_state.chat_started = False
             _reset_chat_state()
-            st.session_state.page = "chat"; st.rerun()
+            st.session_state.page = "intro"; st.rerun()
     with c2:
         if st.button("💬 Back to Chat", use_container_width=True):
             st.session_state.page = "chat"; st.rerun()
+
+
+# ═══════════════════════════════════════════════════════════
+# PAGE: INTRO (name + email gate)
+# ═══════════════════════════════════════════════════════════
+def render_intro():
+    info = support_db.get_sync_info()
+    cnt  = info.get("case_count", 0)
+    last = info.get("last_sync", "")[:16].replace("T", " ") if info.get("last_sync") else "Never"
+
+    # ── Global CSS injected once ─────────────────────────────
+    st.markdown("""
+<style>
+html,body,[data-testid="stAppViewContainer"]{background:#f3f4f6!important;}
+.block-container{max-width:100%!important;padding:16px 20px 0!important;}
+
+/* ── LEFT PANEL content ── */
+.il-panel{background:#111827;border-radius:16px;padding:36px 28px;
+  min-height:87vh;display:flex;flex-direction:column;gap:22px;}
+.il-brand{display:flex;align-items:center;gap:14px;}
+.il-av{width:46px;height:46px;border-radius:13px;
+  background:linear-gradient(135deg,#2563eb,#3b82f6);
+  display:flex;align-items:center;justify-content:center;font-size:22px;flex-shrink:0;}
+.il-name{font-size:17px;font-weight:800;color:#f9fafb;letter-spacing:-.3px;}
+.il-tagline{font-size:11px;color:#6b7280;margin-top:2px;}
+.il-divider{height:1px;background:rgba(255,255,255,.07);margin:2px 0;}
+.il-desc{font-size:12.5px;color:#9ca3af;line-height:1.75;
+  border-left:3px solid #2563eb;padding-left:14px;}
+.il-section-title{font-size:9px;font-weight:700;color:#4b5563;
+  text-transform:uppercase;letter-spacing:1px;margin-bottom:10px;}
+.il-stat-card{background:rgba(255,255,255,.04);border:1px solid rgba(255,255,255,.07);
+  border-radius:11px;padding:14px 18px;position:relative;overflow:hidden;}
+.il-stat-card::before{content:'';position:absolute;top:0;left:0;right:0;height:2px;
+  background:linear-gradient(90deg,#2563eb,#0ea5e9);}
+.il-stat-num{font-size:28px;font-weight:900;color:#f9fafb;line-height:1;}
+.il-stat-lbl{font-size:11px;color:#6b7280;margin-top:4px;}
+.il-feat{display:flex;align-items:center;gap:10px;padding:7px 0;
+  border-bottom:1px solid rgba(255,255,255,.06);font-size:12px;color:#9ca3af;}
+.il-feat:last-child{border-bottom:none;}
+.il-feat-icon{width:26px;height:26px;border-radius:7px;
+  background:rgba(37,99,235,.15);
+  display:flex;align-items:center;justify-content:center;font-size:12px;flex-shrink:0;}
+.il-products{display:flex;gap:6px;flex-wrap:wrap;}
+.il-prod{font-size:11px;font-weight:600;padding:4px 13px;border-radius:6px;
+  background:rgba(37,99,235,.15);border:1px solid rgba(37,99,235,.25);color:#93c5fd;}
+
+/* ── RIGHT PANEL ── */
+.ir-header{padding:44px 8px 20px;}
+.ir-welcome{font-size:26px;font-weight:800;color:#111827;letter-spacing:-.4px;margin-bottom:8px;}
+.ir-sub{font-size:13px;color:#6b7280;line-height:1.65;}
+.ir-footer{text-align:center;font-size:11.5px;color:#9ca3af;line-height:1.6;margin-top:8px;}
+
+/* ── Rectangle Start Chat button ── */
+.stFormSubmitButton>button{
+  border-radius:8px!important;height:50px!important;
+  font-size:15px!important;font-weight:700!important;
+  background:#111827!important;color:#fff!important;
+  border:none!important;letter-spacing:.3px!important;box-shadow:none!important;
+}
+.stFormSubmitButton>button:hover{background:#1f2937!important;transform:none!important;}
+
+/* Form field labels */
+.stTextInput label{font-size:13px!important;font-weight:600!important;color:#374151!important;}
+.stTextInput>div>div>input{
+  height:46px!important;border-radius:8px!important;
+  border:1.5px solid #d1d5db!important;font-size:14px!important;
+  padding:0 14px!important;background:#fff!important;color:#111827!important;
+}
+.stTextInput>div>div>input:focus{border-color:#2563eb!important;
+  box-shadow:0 0 0 3px rgba(37,99,235,.1)!important;}
+</style>""", unsafe_allow_html=True)
+
+    # ── Two-column layout — Streamlit handles the split ──────
+    left_col, right_col = st.columns([1.1, 1.4], gap="medium")
+
+    # ── LEFT: pure self-contained HTML (no widgets) ──────────
+    with left_col:
+        st.markdown(f"""
+<div class="il-panel">
+  <div class="il-brand">
+    <div class="il-av">🤖</div>
+    <div>
+      <div class="il-name">Worksoft AI Support</div>
+      <div class="il-tagline">Qualesce &nbsp;·&nbsp; Powered by Salesforce</div>
+    </div>
+  </div>
+
+  <div class="il-divider"></div>
+
+  <div class="il-desc">
+    Intelligent L1 support for Worksoft products — trained on real resolved cases
+    from your Salesforce knowledge base.
+  </div>
+
+  <div>
+    <div class="il-section-title">Knowledge Base</div>
+    <div class="il-stat-card">
+      <div class="il-stat-num">{cnt}</div>
+      <div class="il-stat-lbl">Resolved cases &nbsp;·&nbsp; Last sync: {last}</div>
+    </div>
+  </div>
+
+  <div>
+    <div class="il-section-title">Products Supported</div>
+    <div class="il-products">
+      <span class="il-prod">CTM</span>
+      <span class="il-prod">Certify</span>
+      <span class="il-prod">Portal</span>
+      <span class="il-prod">Capture</span>
+    </div>
+  </div>
+
+  <div>
+    <div class="il-section-title">Capabilities</div>
+    <div class="il-feat"><span class="il-feat-icon">🔍</span>&nbsp; Smart AI semantic search</div>
+    <div class="il-feat"><span class="il-feat-icon">📎</span>&nbsp; File, screenshot &amp; PDF support</div>
+    <div class="il-feat"><span class="il-feat-icon">🎫</span>&nbsp; Auto Salesforce ticket creation</div>
+    <div class="il-feat"><span class="il-feat-icon">📧</span>&nbsp; IT Admin email notification</div>
+  </div>
+</div>""", unsafe_allow_html=True)
+
+    # ── RIGHT: welcome header + Streamlit form ────────────────
+    with right_col:
+        st.markdown("""
+<div class="ir-header">
+  <div class="ir-welcome">Welcome 👋</div>
+  <div class="ir-sub">Tell us who you are to get started.<br>
+  Your AI support session will be personalised.</div>
+</div>""", unsafe_allow_html=True)
+
+        with st.form("intro_form"):
+            name  = st.text_input("Your Name",  placeholder="e.g. Aravind R")
+            email = st.text_input("Work Email", placeholder="you@qualesce.com")
+            st.markdown('<div style="height:4px;"></div>', unsafe_allow_html=True)
+            submitted = st.form_submit_button(
+                "Start Chat  →", use_container_width=True, type="primary"
+            )
+
+        st.markdown('<div class="ir-footer">Your details are used only to personalise<br>support and attach to any ticket raised.</div>',
+                    unsafe_allow_html=True)
+
+    # ── Handle submit (outside columns — variables still in scope) ──
+    if submitted:
+        name_val  = name.strip()  or "Guest"
+        email_val = email.strip() or ""
+        if email_val and "@" not in email_val:
+            st.error("Please enter a valid email address.")
+        else:
+            st.session_state.user = {"name": name_val, "email": email_val}
+            if not st.session_state.get("session_id"):
+                st.session_state.session_id = support_db.create_session(name_val, email_val)
+            st.session_state.page = "chat"
+            st.rerun()
 
 
 # ═══════════════════════════════════════════════════════════
@@ -2145,7 +2441,8 @@ def _render_ticket(user, ticket):
 # ═══════════════════════════════════════════════════════════
 def main():
     p = st.session_state.page
-    if   p == "resolved":  render_resolved()
+    if   p == "intro":     render_intro()
+    elif p == "resolved":  render_resolved()
     elif p == "escalated": render_escalated()
     else:                  render_chat()
 

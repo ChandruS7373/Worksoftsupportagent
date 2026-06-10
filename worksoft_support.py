@@ -715,7 +715,7 @@ def _ask_groq(
         messages = [{"role": "system", "content": system_prompt}]
         if history:
             # Exclude the last message if it's a user message — it's added as user_prompt below
-            hist = history[-10:]
+            hist = history[-20:]
             for i, msg in enumerate(hist):
                 role    = msg.get("role", "")
                 content = msg.get("content", "")
@@ -723,7 +723,7 @@ def _ask_groq(
                 if i == len(hist) - 1 and role == "user" and content.strip() == user_prompt.strip():
                     continue
                 if role in ("user", "assistant") and content:
-                    messages.append({"role": role, "content": str(content)[:800]})
+                    messages.append({"role": role, "content": str(content)[:2000]})
         messages.append({"role": "user", "content": user_prompt})
 
         stream_slot = st.session_state.get("_stream_slot") if stream else None
@@ -1409,9 +1409,9 @@ def _retrieve_best_cases(query: str, top_n: int = 1) -> list:
         system_prompt=(
             "You are a Worksoft support specialist. "
             "Read each case's ACTUAL CONTENT carefully — not just the subject. "
-            "Pick the 1-3 cases whose content genuinely answers the user's question. "
-            "Prefer cases that have detailed resolution steps or comments. "
-            "Return ONLY position numbers, e.g. '2' or '1, 3'. "
+            f"Pick the best 1-{top_n} cases whose content genuinely answers the user's question. "
+            "Prefer cases with the most detailed resolution steps or comments. "
+            "Return ONLY position numbers, e.g. '2' or '1, 3, 5'. "
             "If no case content actually addresses the user's issue, return: NONE"
         ),
         user_prompt=(
@@ -1468,7 +1468,7 @@ def process_chat(text: str, history: list, file_data: dict = None) -> str:
         _build_case_knowledge(matches, query) if matches else ("", False, "")
     )
     if has_content:
-        st.session_state.sf_resolution   = knowledge_text[:3000]
+        st.session_state.sf_resolution   = knowledge_text[:6000]
         st.session_state.sf_case_context = ctx_summary
 
     sf_res = st.session_state.get("sf_resolution", "")
@@ -1492,35 +1492,42 @@ def process_chat(text: str, history: list, file_data: dict = None) -> str:
     user_turn = sum(1 for m in history if m.get("role") == "user")
     st.session_state.turn_count = user_turn
 
-    if user_turn <= 1:
+    # Only ask clarifying questions when the first message is genuinely short/vague.
+    # If the user has already given enough detail (long message, mentions errors, product names,
+    # or specific symptoms), skip straight to solving — wasting a turn kills perceived accuracy.
+    _msg_is_vague = (
+        user_turn <= 1
+        and len(text.strip()) < 80
+        and not any(kw in text.lower() for kw in [
+            "error","fail","issue","problem","not working","cannot","can't","won't",
+            "ctm","certify","portal","capture","agent","iis","timeout","login",
+            "abort","stuck","crash","500","401","403","404","exception","traceback",
+        ])
+    )
+
+    if _msg_is_vague:
         conversation_style = """
 
-=== PHASE 1 — UNDERSTAND BEFORE SOLVING ===
-The user has just sent their FIRST message. Your job right now is to understand the problem,
-NOT to provide solutions or troubleshooting steps yet.
-
-Respond with:
-  1. A brief, warm acknowledgment of what they said (1 sentence max).
-  2. Then ask 2–3 focused clarifying questions (bullet list), such as:
-     • Which exact product are they using? (CTM / Certify / Portal / Capture) — skip if already stated.
-     • What exact error message or behaviour are they seeing?
-     • What have they already tried, if anything?
-
-Keep the response SHORT, friendly, and conversational.
-DO NOT give any steps, fixes, or solutions in this turn — that comes after you understand the issue.
+=== CLARIFY FIRST ===
+The user's first message is brief and lacks detail. Ask 2–3 short, focused clarifying questions:
+  • Which Worksoft product? (CTM / Certify / Portal / Capture) — skip if already clear.
+  • What exact error or unexpected behaviour are they seeing?
+  • What have they already tried?
+Keep it short and friendly. DO NOT give solutions yet.
 """
     else:
         conversation_style = """
 
-=== PHASE 2 — RESOLVE THE ISSUE ===
-CONVERSATION STYLE:
-- Be warm, direct, and concise — like a knowledgeable colleague
-- For technical Worksoft issues: give numbered steps (1. **Action** — reason)
-- For general questions: answer naturally, no steps needed
-- Keep follow-up replies SHORT (2-4 sentences) — this is a chat, not a report
-- After giving steps, always invite the user: "Let me know what happens! 👇"
-- If the user says the issue is fixed → celebrate briefly, suggest clicking ✅ Resolved at L1
-- Never mention Salesforce case IDs or database internals to the user
+=== RESOLVE THE ISSUE ===
+RULES:
+- Use the Salesforce knowledge base entries above as your PRIMARY source — follow those steps exactly.
+- If no case data matches, use your Worksoft domain knowledge confidently.
+- Give numbered steps for technical issues: "1. **Do X** — this restarts the service."
+- For simple questions answer directly in 1-3 sentences.
+- After steps always add: "Let me know what happens! 👇"
+- NEVER invent steps that contradict the knowledge base.
+- NEVER mention Salesforce case IDs, database names, or internal system details to the user.
+- If the user confirms the fix worked → celebrate briefly and suggest ✅ Resolved at L1.
 """
 
     system_prompt = (
@@ -1551,8 +1558,9 @@ For questions outside Worksoft, answer naturally from your general knowledge.
         system_prompt=system_prompt,
         user_prompt=query,
         history=history,
-        max_tokens=900,
+        max_tokens=1400,
         stream=True,
+        temperature=0.15,
     ) or "I'm having trouble connecting to the AI right now. Please check your API key in `.streamlit/secrets.toml` and restart."
 
     st.session_state.chat_phase = "resolving"
@@ -1593,11 +1601,11 @@ def _build_case_knowledge(matches: list, query: str = "") -> tuple:
         if subject:
             parts.append(f"Issue type: {subject}")
         if desc:
-            parts.append(f"Problem description:\n{desc[:800]}")
+            parts.append(f"Problem description:\n{desc[:1500]}")
         if resolution:
-            parts.append(f"Resolution summary:\n{resolution[:600]}")
+            parts.append(f"Resolution summary:\n{resolution[:1500]}")
         if comments:
-            parts.append(f"Detailed steps/comments:\n{comments[:1800]}")
+            parts.append(f"Detailed steps/comments:\n{comments[:3500]}")
 
         if len(parts) > 1:   # must have more than just the subject
             blocks.append(f"── Knowledge Entry {i} ──\n" + "\n\n".join(parts))

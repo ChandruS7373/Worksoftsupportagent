@@ -1477,15 +1477,22 @@ def process_chat(text: str, history: list, file_data: dict = None) -> str:
     sf_section = ""
     if has_content:
         sf_section = (
-            "\n\n=== SALESFORCE KNOWLEDGE BASE (real resolved cases) ===\n"
+            "\n\n=== SALESFORCE RESOLVED CASES — YOUR PRIMARY ANSWER SOURCE ===\n"
+            "These are real tickets resolved by Qualesce Worksoft support engineers.\n"
+            "RULES FOR USING THIS DATA:\n"
+            "  • If resolution steps exist here → reproduce them exactly as the basis of your answer.\n"
+            "  • Do NOT skip, reorder, or contradict any step that appears in these cases.\n"
+            "  • You may add a one-line 'why' to help the user understand a step, but keep the steps intact.\n"
+            "  • If multiple cases are present, pick the one whose problem description best matches the user's query.\n\n"
             + knowledge_text
-            + "\n=== END OF KNOWLEDGE BASE ===\n"
+            + "\n=== END OF SALESFORCE DATA ===\n"
         )
     elif sf_res:
         sf_section = (
-            "\n\n=== SALESFORCE KNOWLEDGE BASE (from earlier in this conversation) ===\n"
-            + sf_res[:2000]
-            + "\n=== END ===\n"
+            "\n\n=== SALESFORCE RESOLVED CASES (retrieved earlier in this conversation) ===\n"
+            "Apply the resolution steps below if they remain relevant to the current message.\n\n"
+            + sf_res[:4000]
+            + "\n=== END OF SALESFORCE DATA ===\n"
         )
 
     # Determine how many user turns have happened so far
@@ -1507,41 +1514,48 @@ def process_chat(text: str, history: list, file_data: dict = None) -> str:
 
     if _msg_is_vague:
         conversation_style = """
-
 === CLARIFY FIRST ===
-The user's first message is brief and lacks detail. Ask 2–3 short, focused clarifying questions:
-  • Which Worksoft product? (CTM / Certify / Portal / Capture) — skip if already clear.
-  • What exact error or unexpected behaviour are they seeing?
+The user's first message is brief. Ask 2–3 short clarifying questions:
+  • Which Worksoft product? (CTM / Certify / Portal / Capture) — skip if already stated.
+  • What exact error message or unexpected behaviour are they seeing?
   • What have they already tried?
-Keep it short and friendly. DO NOT give solutions yet.
+Be warm and brief. Do NOT give solutions yet.
 """
     else:
         conversation_style = """
+=== HOW TO CONSTRUCT YOUR ANSWER ===
+Follow this order strictly:
 
-=== RESOLVE THE ISSUE ===
-RULES:
-- Use the Salesforce knowledge base entries above as your PRIMARY source — follow those steps exactly.
-- If no case data matches, use your Worksoft domain knowledge confidently.
-- Give numbered steps for technical issues: "1. **Do X** — this restarts the service."
-- For simple questions answer directly in 1-3 sentences.
-- After steps always add: "Let me know what happens! 👇"
-- NEVER invent steps that contradict the knowledge base.
-- NEVER mention Salesforce case IDs, database names, or internal system details to the user.
-- If the user confirms the fix worked → celebrate briefly and suggest ✅ Resolved at L1.
+1. SALESFORCE DATA FIRST — If the "SALESFORCE RESOLVED CASES" section above contains
+   resolution steps that match the user's problem, build your entire answer around those steps.
+   Quote the steps faithfully. Do NOT replace or skip any step from the case.
+
+2. FILL GAPS WITH DOMAIN KNOWLEDGE — If the case data is partial, use your Worksoft
+   expertise only to fill in missing details. Make it seamless to the user.
+
+3. NO MATCHING CASE — If there is no SF data, answer confidently from your Worksoft
+   domain knowledge (CTM, Certify, Portal, Capture, IIS, appsettings).
+
+4. ANSWER FORMAT:
+   - 1 sentence: what you believe is causing the issue.
+   - Numbered steps: "1. **Do X** — (brief reason why)"
+   - Close with: "Let me know what happens! 👇"
+   - For simple one-line questions: just answer directly, no steps needed.
+
+5. HARD RULES:
+   - NEVER mention Salesforce, case IDs, case numbers, or any database name to the user.
+   - NEVER invent steps that contradict the SF case data.
+   - NEVER give a generic answer when specific SF case steps are available.
+   - If user says it worked → briefly celebrate and suggest ✅ Resolved at L1.
 """
 
+    # Prompt order matters: SF data + rules go LAST so the model weights them highest.
     system_prompt = (
         f"{_EXPERT_PERSONA}\n\n"
-        f"{_WORKSOFT_DOMAIN}"
+        f"{_WORKSOFT_DOMAIN}\n"
         + sf_section
-        + f"""
-
-You are a smart, conversational AI support assistant for Worksoft products at Qualesce.
-You can answer ANY question the user asks.
-Your PRIMARY knowledge source is the Salesforce resolved cases above — always use them when available.
-When Salesforce case data is present, follow those resolution steps exactly — do not substitute, skip, or invent alternative steps.
-For questions outside Worksoft, answer naturally from your general knowledge.
-{conversation_style}"""
+        + "\n"
+        + conversation_style
     )
 
     # ── Stream Groq response ───────────────────────────────────

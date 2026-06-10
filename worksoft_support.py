@@ -572,7 +572,8 @@ def sync_sf_knowledge() -> tuple[bool, str]:
 # ═══════════════════════════════════════════════════════════
 # AI HELPERS  — Groq primary, Claude/OpenAI optional fallback
 # ═══════════════════════════════════════════════════════════
-_GROQ_MODEL        = "llama-3.3-70b-versatile"       # primary — fast + capable
+_GROQ_MODEL        = "llama-3.3-70b-versatile"        # primary — fast + capable (Phase 1-2)
+_GROQ_REASON_MODEL = "deepseek-r1-distill-llama-70b"  # reasoning model — Phase 3+ deep follow-ups
 _GROQ_FAST_MODEL   = "llama-3.1-8b-instant"          # tiny calls (classification, 1-word answers)
 _GROQ_VISION_MODEL = "llama-3.2-11b-vision-preview"  # image analysis
 
@@ -696,13 +697,14 @@ def _groq_client():
 
 
 def _ask_groq(
-    system_prompt: str,
-    user_prompt:   str,
-    max_tokens:    int   = 800,
-    history:       list  = None,
-    fast:          bool  = False,
-    stream:        bool  = False,
-    temperature:   float = 0.3,
+    system_prompt:  str,
+    user_prompt:    str,
+    max_tokens:     int   = 800,
+    history:        list  = None,
+    fast:           bool  = False,
+    stream:         bool  = False,
+    temperature:    float = 0.3,
+    model_override: str   = None,
 ) -> str:
     """
     Groq LLM call — primary AI engine.
@@ -719,7 +721,7 @@ def _ask_groq(
 
     try:
         client = _groq_client()
-        model  = _GROQ_FAST_MODEL if fast else _GROQ_MODEL
+        model  = model_override or (_GROQ_FAST_MODEL if fast else _GROQ_MODEL)
 
         messages = [{"role": "system", "content": system_prompt}]
         if history:
@@ -738,19 +740,36 @@ def _ask_groq(
         stream_slot = st.session_state.get("_stream_slot") if stream else None
 
         if stream_slot is not None:
-            full       = ""
+            full           = ""    # content shown to the user
+            think_buf      = ""    # raw buffer until <think>...</think> closes
+            think_closed   = False # True once we know the <think> block (or its absence) is resolved
+            typing_cleared = False
             completion = client.chat.completions.create(
                 model=model, messages=messages,
                 max_tokens=max_tokens, temperature=effective_temp, stream=True,
             )
             for chunk in completion:
                 delta = chunk.choices[0].delta.content or ""
-                if not full and delta:
-                    typing = st.session_state.pop("_typing_slot", None)
-                    if typing:
-                        typing.empty()
-                full += delta
-                stream_slot.markdown(full + " ▌")
+                if not think_closed:
+                    think_buf += delta
+                    if "</think>" in think_buf:
+                        # DeepSeek R1 reasoning block closed — display only what follows
+                        after = think_buf.split("</think>", 1)[-1].lstrip("\n")
+                        full = after
+                        think_closed = True
+                    elif "<think>" not in think_buf and len(think_buf) > 60:
+                        # No <think> tag in first 60 chars — normal model, emit everything
+                        full = think_buf
+                        think_closed = True
+                else:
+                    full += delta
+                if full:
+                    if not typing_cleared:
+                        typing = st.session_state.pop("_typing_slot", None)
+                        if typing:
+                            typing.empty()
+                        typing_cleared = True
+                    stream_slot.markdown(full + " ▌")
             if full:
                 stream_slot.markdown(full)
             return full
@@ -759,7 +778,11 @@ def _ask_groq(
             model=model, messages=messages,
             max_tokens=max_tokens, temperature=effective_temp,
         )
-        return (completion.choices[0].message.content or "").strip()
+        raw = (completion.choices[0].message.content or "").strip()
+        # Strip DeepSeek R1 internal reasoning block when present
+        if "<think>" in raw and "</think>" in raw:
+            raw = raw.split("</think>", 1)[-1].strip()
+        return raw
     except Exception as e:
         import traceback
         print(f"[Groq error] {e}\n{traceback.format_exc()}")
@@ -768,9 +791,10 @@ def _ask_groq(
 
 def _ask_ai(system_prompt: str, user_prompt: str, max_tokens: int = 800,
             history: list = None, fast: bool = False, stream: bool = False,
-            temperature: float = 0.3) -> str:
+            temperature: float = 0.3, model_override: str = None) -> str:
     """Single entry-point for all AI calls — routes through Groq."""
-    return _ask_groq(system_prompt, user_prompt, max_tokens, history, fast, stream, temperature)
+    return _ask_groq(system_prompt, user_prompt, max_tokens, history, fast, stream, temperature,
+                     model_override=model_override)
 
 
 def _ask_claude_fallback(system_prompt, user_prompt, max_tokens, history, fast, stream, temperature=0.3):
@@ -1472,7 +1496,18 @@ def process_chat(text: str, history: list, file_data: dict = None) -> str:
         query = text
 
     # ── Pull matching Salesforce cases ─────────────────────────
-    matches = _retrieve_best_cases(query, top_n=5) if query.strip() else []
+    # In deeper turns the current message is often too short ("still not working") to be a
+    # useful retrieval signal on its own. Combine last 4 user messages so we find the right
+    # SF cases even when the follow-up lacks the original issue description.
+    _prior_user_msgs = [m["content"] for m in history if m.get("role") == "user"]
+    if len(_prior_user_msgs) >= 2:
+        _combined = " | ".join(_prior_user_msgs[-4:])
+        if text.strip().lower() not in _combined.lower():
+            _combined = text + " | " + _combined
+        _rich_query = _combined[:800]
+    else:
+        _rich_query = query
+    matches = _retrieve_best_cases(_rich_query, top_n=5) if (_rich_query or query).strip() else []
     knowledge_text, has_content, ctx_summary = (
         _build_case_knowledge(matches, query) if matches else ("", False, "")
     )
@@ -1573,10 +1608,16 @@ HARD RULES:
 """
 
     else:
-        # ── PHASE 3: Full solution mode, conversational follow-up ──────────────
+        # ── PHASE 3: Full solution mode with deep reasoning ────────────────────
         conversation_style = """
-=== PHASE 3 — RESOLVE AND FOLLOW UP ===
-You are now in active troubleshooting. Be the best support agent the user has ever talked to.
+=== PHASE 3 — DEEP TROUBLESHOOTING ===
+You are now in active troubleshooting. Think carefully before you answer.
+
+BEFORE WRITING YOUR RESPONSE, REASON THROUGH:
+1. What is the EXACT root cause based on the FULL conversation history (not just the latest message)?
+2. What has the user already tried? Did those steps succeed, fail, or partially work?
+3. Which Salesforce case (if any) matches this situation most precisely — and why?
+4. What is the single most important next action that has NOT been tried yet?
 
 HOW TO CONSTRUCT YOUR ANSWER:
 1. SALESFORCE DATA FIRST — If the Salesforce case data above matches the user's issue,
@@ -1589,20 +1630,22 @@ HOW TO CONSTRUCT YOUR ANSWER:
 3. NO CASE MATCH — Answer confidently from your deep Worksoft domain knowledge.
 
 ANSWER FORMAT:
-- Acknowledge what the user said in 1 sentence (especially if they tried something).
-- 1 sentence on the likely root cause.
+- Acknowledge what the user just said in 1 sentence (especially if they tried something).
+- 1 sentence naming the likely root cause.
 - Numbered steps: "1. **Do X** — (plain-English reason)"
-- Close with something warm and engaging:
+- Close with something warm:
   "Try those and let me know what happens — I'm right here! 👇"
   "Give step 2 especially a go and tell me what you see."
   "If that doesn't crack it, we'll dig deeper together!"
 
 HARD RULES:
+- Use ALL conversation history to understand the full context — never treat a short
+  follow-up message in isolation.
 - NEVER mention Salesforce, case IDs, case numbers, or any internal system name.
 - NEVER invent steps that contradict the SF case data.
 - NEVER give a cold, robotic or generic answer — always sound like a caring colleague.
 - If user says it worked → celebrate warmly and suggest ✅ Resolved at L1.
-- If user is still stuck → empathise, ask what happened at each step, and try a different angle.
+- If user is still stuck → empathise, ask what happened at each step, try a different angle.
 """
 
     # Prompt order matters: SF data + rules go LAST so the model weights them highest.
@@ -1624,6 +1667,10 @@ HARD RULES:
             "Get a free Groq key at **console.groq.com** — it takes under a minute."
         )
 
+    # Phase 3+ uses the reasoning model (DeepSeek R1) for deeper chain-of-thought accuracy.
+    # Phase 1-2 use the standard fast model since they just gather details / begin solving.
+    _model = _GROQ_REASON_MODEL if user_turn >= 3 else None
+
     reply = _ask_ai(
         system_prompt=system_prompt,
         user_prompt=query,
@@ -1631,6 +1678,7 @@ HARD RULES:
         max_tokens=1400,
         stream=True,
         temperature=0.15,
+        model_override=_model,
     ) or "I'm having trouble connecting to the AI right now. Please check your API key in `.streamlit/secrets.toml` and restart."
 
     st.session_state.chat_phase = "resolving"

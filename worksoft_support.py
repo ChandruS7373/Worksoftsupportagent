@@ -61,86 +61,128 @@ st.set_page_config(
 # ═══════════════════════════════════════════════════════════
 st.markdown("""
 <style>
-/* ── RESET (all pages) ── */
+/* ── RESET ── */
 [data-testid="stHeader"]{display:none!important;}
 [data-testid="stSidebar"]{display:none!important;}
-header,#MainMenu,footer,.stDeployButton{display:none!important;}
+header,#MainMenu,footer,.stDeployButton,
+[data-testid="stFooter"],[data-testid="stDecoration"],
+[data-testid="stStatusWidget"]{display:none!important;}
 [data-testid="stMain"]>div{padding-top:0!important;}
 html,body,[data-testid="stAppViewContainer"]{
-  font-family:-apple-system,BlinkMacSystemFont,'Segoe UI',Roboto,sans-serif!important;
-  background:#f0f0f5!important;
+  font-family:'Inter',-apple-system,BlinkMacSystemFont,'Segoe UI',sans-serif!important;
+  background:#f0f2f5!important;
 }
 
-/* ── CHAT NAVBAR ── */
+/* ── NAVBAR ── */
 .chat-navbar{
   background:#fff;border-bottom:1px solid #e5e7eb;
-  box-shadow:0 1px 6px rgba(0,0,0,.07);
+  box-shadow:0 1px 8px rgba(0,0,0,.06);
   display:flex;align-items:center;justify-content:space-between;
-  padding:0 24px;height:62px;
-  position:sticky;top:0;z-index:9000;
+  padding:0 28px;height:60px;position:sticky;top:0;z-index:9000;
 }
 .cn-brand{display:flex;align-items:center;gap:10px;}
-.cn-icon{width:34px;height:34px;border-radius:9px;flex-shrink:0;
-  background:linear-gradient(135deg,#534AB7,#7F77DD);
-  display:flex;align-items:center;justify-content:center;font-size:18px;}
-.cn-title{font-size:15px;font-weight:600;color:#111827;}
-.cn-portal{font-size:13px;color:#6b7280;}
+.cn-icon{
+  width:36px;height:36px;border-radius:10px;flex-shrink:0;
+  background:linear-gradient(135deg,#2563eb,#6366f1);
+  display:flex;align-items:center;justify-content:center;
+  font-size:17px;color:#fff;box-shadow:0 2px 8px rgba(37,99,235,.3);}
+.cn-brand-info{display:flex;flex-direction:column;gap:1px;}
+.cn-title{font-size:14px;font-weight:700;color:#111827;}
+.cn-online{font-size:10px;color:#10b981;font-weight:600;
+  display:flex;align-items:center;gap:4px;}
+.cn-online::before{content:'';display:inline-block;width:6px;height:6px;
+  border-radius:50%;background:#10b981;}
+.cn-portal{
+  font-size:12px;color:#2563eb;background:#eff6ff;
+  border:1px solid #bfdbfe;border-radius:20px;
+  padding:4px 14px;font-weight:600;
+  position:absolute;left:50%;transform:translateX(-50%);}
 .cn-user-wrap{display:flex;align-items:center;gap:10px;}
 .cn-user-text{text-align:right;line-height:1.3;}
 .cn-user-name{font-size:13px;font-weight:600;color:#111827;display:block;}
 .cn-user-co{font-size:11px;color:#9ca3af;display:block;}
-.cn-avatar{width:34px;height:34px;border-radius:50%;flex-shrink:0;
-  background:#6c63d5;color:#fff;
-  display:flex;align-items:center;justify-content:center;font-size:11px;font-weight:700;}
-.cn-dots{font-size:20px;color:#9ca3af;cursor:pointer;letter-spacing:-1px;}
+.cn-avatar{
+  width:34px;height:34px;border-radius:50%;flex-shrink:0;
+  background:linear-gradient(135deg,#2563eb,#6366f1);color:#fff;
+  display:flex;align-items:center;justify-content:center;
+  font-size:12px;font-weight:700;box-shadow:0 2px 6px rgba(37,99,235,.25);}
 
-/* ── CHAT MESSAGES ── */
-@keyframes msgIn{from{opacity:0;transform:translateY(10px)}to{opacity:1;transform:none}}
-@keyframes typingBounce{0%,60%,100%{transform:translateY(0);opacity:.4}30%{transform:translateY(-5px);opacity:1}}
-.chat-msgs{padding:12px 0 10px;display:flex;flex-direction:column;gap:12px;max-width:860px;margin:0 auto;}
-.date-stamp{text-align:center;font-size:11px;color:#9ca3af;margin-bottom:2px;}
-.msg-row{display:flex;gap:10px;align-items:flex-end;}
-.msg-row.user{flex-direction:row-reverse;}
-.msg-row.new{animation:msgIn .28s ease both;}
-.msg-av{width:28px;height:28px;border-radius:50%;flex-shrink:0;
-  display:flex;align-items:center;justify-content:center;font-size:13px;}
-.msg-av.bot{background:#ede9fe;border:1px solid #ddd6fe;font-size:14px;}
-.msg-av.user{background:#6c63d5;color:#fff;font-size:10px;font-weight:700;}
-.bubble{padding:10px 14px;font-size:13.5px;line-height:1.6;max-width:72%;word-break:break-word;
-  box-shadow:0 1px 4px rgba(0,0,0,.06);}
-.msg-row.assistant .bubble{background:#fff;border:1px solid #e9eaec;
-  border-radius:4px 18px 18px 18px;color:#111827;}
-.msg-row.user .bubble{background:linear-gradient(135deg,#534AB7,#6c63d5);
-  color:#fff;border-radius:18px 4px 18px 18px;box-shadow:0 2px 8px rgba(83,74,183,.3);}
-.bubble p{margin:0 0 4px;}.bubble p:last-child{margin-bottom:0;}
-.bubble ol,.bubble ul{margin:4px 0 4px 16px;padding:0;}
-.bubble li{margin:2px 0;}
-.bubble strong{font-weight:600;}
-/* ── TYPING INDICATOR ── */
-.typing-row{display:flex;gap:10px;align-items:flex-end;animation:msgIn .22s ease both;}
-.typing-av{width:28px;height:28px;border-radius:50%;background:#ede9fe;border:1px solid #ddd6fe;
-  flex-shrink:0;display:flex;align-items:center;justify-content:center;font-size:14px;}
-.typing-bubble{padding:10px 14px;background:#fff;border:1px solid #e9eaec;
-  border-radius:4px 18px 18px 18px;box-shadow:0 1px 4px rgba(0,0,0,.06);
-  display:flex;gap:4px;align-items:center;}
-.typing-dot{width:6px;height:6px;border-radius:50%;background:#a0aec0;
-  animation:typingBounce 1.2s infinite ease-in-out;}
-.typing-dot:nth-child(2){animation-delay:.2s;}
-.typing-dot:nth-child(3){animation-delay:.4s;}
+/* ── MESSAGES ── */
+@keyframes msgIn{from{opacity:0;transform:translateY(6px)}to{opacity:1;transform:none}}
+@keyframes dotBounce{0%,60%,100%{transform:translateY(0);opacity:.4}30%{transform:translateY(-5px);opacity:1}}
+.chat-msgs{
+  padding:24px 0 16px;display:flex;flex-direction:column;
+  gap:4px;max-width:1140px;margin:0 auto;
+}
+.date-stamp{
+  text-align:center;font-size:11px;color:#9ca3af;margin-bottom:16px;
+  font-weight:500;display:flex;align-items:center;gap:10px;
+}
+.date-stamp::before,.date-stamp::after{content:'';flex:1;height:1px;background:#e5e7eb;}
+.msg-row{display:flex;align-items:flex-end;padding:2px 0;}
+.msg-row.new{animation:msgIn .22s ease both;}
+
+/* Bot */
+.msg-row.assistant{flex-direction:row;gap:10px;padding:6px 0;align-items:flex-start;}
+.msg-av{width:32px;height:32px;border-radius:50%;flex-shrink:0;
+  display:flex;align-items:center;justify-content:center;font-size:13px;font-weight:700;}
+.msg-av.bot{
+  background:linear-gradient(135deg,#2563eb,#6366f1);color:#fff;
+  box-shadow:0 2px 6px rgba(37,99,235,.22);}
+.bot-text{
+  background:#fff;border:1px solid #e5e7eb;
+  border-radius:4px 18px 18px 18px;
+  padding:12px 16px;max-width:78%;
+  font-size:14.5px;line-height:1.75;color:#111827;
+  word-break:break-word;
+  box-shadow:0 1px 4px rgba(0,0,0,.05);}
+.bot-text p{margin:0 0 6px;}.bot-text p:last-child{margin:0;}
+.bot-text ol,.bot-text ul{margin:4px 0 6px 18px;padding:0;}
+.bot-text li{margin:3px 0;line-height:1.65;}
+.bot-text strong{font-weight:600;color:#1e40af;}
+.bot-text code{background:#eff6ff;color:#1d4ed8;padding:1px 5px;border-radius:4px;font-size:13px;}
+
+/* User */
+.msg-row.user{flex-direction:row-reverse;padding:6px 0;align-items:flex-end;}
+.user-bubble{
+  background:linear-gradient(135deg,#2563eb,#3b82f6);
+  color:#fff;border-radius:18px 4px 18px 18px;
+  padding:12px 16px;font-size:14.5px;line-height:1.65;
+  max-width:72%;word-break:break-word;
+  box-shadow:0 3px 12px rgba(37,99,235,.28);}
+.user-bubble p{margin:0;}
+
+/* ── TYPING ── */
+.typing-row{display:flex;gap:10px;align-items:flex-start;padding:6px 0;animation:msgIn .2s ease both;}
+.typing-av{width:32px;height:32px;border-radius:50%;flex-shrink:0;
+  background:linear-gradient(135deg,#2563eb,#6366f1);color:#fff;
+  font-size:13px;font-weight:700;display:flex;align-items:center;
+  justify-content:center;box-shadow:0 2px 6px rgba(37,99,235,.22);}
+.typing-bubble{
+  background:#fff;border:1px solid #e5e7eb;
+  border-radius:4px 18px 18px 18px;
+  padding:14px 18px;box-shadow:0 1px 4px rgba(0,0,0,.05);}
+.typing-dots{display:flex;gap:5px;align-items:center;}
+.typing-dot{width:7px;height:7px;border-radius:50%;background:#93c5fd;
+  animation:dotBounce 1.2s infinite ease-in-out;}
+.typing-dot:nth-child(2){animation-delay:.15s;}
+.typing-dot:nth-child(3){animation-delay:.3s;}
 
 /* ── FEEDBACK CARD ── */
-.fb-card{max-width:820px;margin:0 auto;background:#fff;border:1px solid #e5e7eb;
-  border-radius:10px;padding:8px 14px;display:flex;align-items:center;gap:10px;
-  box-shadow:0 1px 3px rgba(0,0,0,.04);}
-.fb-text{font-size:12px;font-weight:500;color:#374151;flex:1;}
+.fb-card{max-width:1140px;margin:8px auto;background:#fff;
+  border:1px solid #e5e7eb;border-radius:14px;
+  padding:12px 18px;display:flex;align-items:center;gap:10px;
+  box-shadow:0 2px 8px rgba(0,0,0,.05);}
+.fb-text{font-size:13px;font-weight:600;color:#374151;flex:1;}
 
 /* ── UPLOAD CARD ── */
-.uc-card{max-width:820px;margin:6px auto 0;background:#fff;border:1.5px dashed #c4b5fd;
-  border-radius:10px;padding:8px 14px;display:flex;align-items:center;gap:10px;}
-.uc-icon{width:30px;height:30px;background:#f5f3ff;border-radius:8px;flex-shrink:0;
+.uc-card{max-width:1140px;margin:6px auto 0;background:#fff;
+  border:1.5px dashed #93c5fd;border-radius:14px;
+  padding:12px 18px;display:flex;align-items:center;gap:10px;}
+.uc-icon{width:32px;height:32px;background:#eff6ff;border-radius:8px;flex-shrink:0;
   display:flex;align-items:center;justify-content:center;font-size:15px;}
-.uc-title{font-size:12px;font-weight:600;color:#111827;}
-.uc-sub{font-size:11px;color:#6b7280;margin-top:1px;}
+.uc-title{font-size:13px;font-weight:600;color:#1e40af;}
+.uc-sub{font-size:11px;color:#9ca3af;margin-top:1px;}
 
 /* ── FILE UPLOADER ── */
 div[data-testid="stFileUploader"]>label{display:none!important;}
@@ -151,43 +193,45 @@ section[data-testid="stFileUploaderDropzone"]>div{
   width:auto!important;flex-direction:row!important;justify-content:flex-end!important;gap:0!important;}
 section[data-testid="stFileUploaderDropzone"]>div>div:first-child{display:none!important;}
 section[data-testid="stFileUploaderDropzone"] button{
-  background:#fff!important;border:1.5px solid #d1d5db!important;border-radius:8px!important;
-  color:#374151!important;font-size:12px!important;font-weight:500!important;
-  padding:5px 14px!important;width:auto!important;height:32px!important;
+  background:#fff!important;border:1.5px solid #c7d2fe!important;border-radius:8px!important;
+  color:#2563eb!important;font-size:12px!important;font-weight:600!important;
+  padding:4px 14px!important;width:auto!important;height:30px!important;
   min-height:0!important;box-shadow:none!important;}
-section[data-testid="stFileUploaderDropzone"] button::before{content:"🗂  ";}
+section[data-testid="stFileUploaderDropzone"] button::before{content:"📎  ";}
 div[data-testid="stFileUploader"] small{display:none!important;}
 [data-testid="stFileUploaderFile"]{font-size:11px!important;}
 
 /* ── SUPPORT LEVEL ROW ── */
-.support-level-row{display:flex;align-items:center;gap:10px;padding:8px 0 4px;max-width:860px;margin:0 auto;}
-.support-level-label{font-size:11.5px;color:#6b7280;font-weight:600;white-space:nowrap;}
+.support-level-row{display:flex;align-items:center;gap:8px;padding:6px 0 2px;max-width:860px;margin:0 auto;}
+.support-level-label{font-size:11px;color:#9ca3af;font-weight:600;white-space:nowrap;}
 
 /* ── TICKET CARD ── */
 .ticket-card{background:#fff;border:1px solid #e5e7eb;border-radius:16px;
-  box-shadow:0 4px 20px rgba(0,0,0,.07);padding:20px 24px;margin:12px auto;max-width:580px;}
-.ticket-id{font-size:10px;font-weight:600;color:#534AB7;letter-spacing:.5px;text-transform:uppercase;}
-.ticket-num{font-size:22px;font-weight:800;color:#111827;margin:4px 0 12px;}
-.ticket-row{display:flex;gap:10px;align-items:flex-start;margin-bottom:6px;font-size:12.5px;}
-.ticket-lbl{color:#6b7280;min-width:70px;flex-shrink:0;}
+  box-shadow:0 4px 16px rgba(0,0,0,.07);padding:18px 22px;margin:12px auto;max-width:520px;}
+.ticket-id{font-size:10px;font-weight:700;color:#2563eb;letter-spacing:.8px;text-transform:uppercase;}
+.ticket-num{font-size:22px;font-weight:800;color:#111827;margin:3px 0 12px;}
+.ticket-row{display:flex;gap:8px;align-items:flex-start;margin-bottom:5px;font-size:12.5px;}
+.ticket-lbl{color:#9ca3af;min-width:68px;flex-shrink:0;}
 .ticket-val{color:#111827;font-weight:600;word-break:break-all;}
 .ticket-link{display:inline-flex;align-items:center;gap:6px;margin-top:12px;
-  background:#534AB7;color:#fff!important;text-decoration:none;font-size:12.5px;font-weight:600;
-  padding:8px 18px;border-radius:9px;box-shadow:0 2px 8px rgba(83,74,183,.28);}
-.badge-new{display:inline-block;background:#ede9fe;color:#534AB7;font-size:9px;font-weight:700;
+  background:linear-gradient(135deg,#2563eb,#3b82f6);
+  color:#fff!important;text-decoration:none;font-size:12.5px;font-weight:600;
+  padding:8px 18px;border-radius:9px;box-shadow:0 3px 10px rgba(37,99,235,.28);}
+.badge-new{display:inline-block;background:#eff6ff;color:#2563eb;font-size:9px;font-weight:700;
   padding:2px 8px;border-radius:99px;text-transform:uppercase;letter-spacing:.4px;}
 
 /* ── ANIMATIONS ── */
 @keyframes fadeUp{from{opacity:0;transform:translateY(8px)}to{opacity:1;transform:translateY(0)}}
-.anim{animation:fadeUp .3s ease both;}
+.anim{animation:fadeUp .28s ease both;}
 @keyframes scaleIn{from{opacity:0;transform:scale(.96)}to{opacity:1;transform:scale(1)}}
-.anim-scale{animation:scaleIn .28s ease both;}
+.anim-scale{animation:scaleIn .24s ease both;}
 
-/* ── PRIMARY BUTTON (global) ── */
+/* ── PRIMARY BUTTON ── */
 div.stButton>button[kind="primary"]{
-  background:#534AB7!important;color:#fff!important;
-  border-radius:10px!important;border:none!important;font-weight:600!important;}
-div.stButton>button[kind="primary"]:hover{background:#4338ca!important;}
+  background:linear-gradient(135deg,#2563eb,#3b82f6)!important;color:#fff!important;
+  border-radius:9px!important;border:none!important;font-weight:600!important;
+  box-shadow:0 2px 8px rgba(37,99,235,.25)!important;}
+div.stButton>button[kind="primary"]:hover{background:linear-gradient(135deg,#1d4ed8,#2563eb)!important;}
 </style>
 """, unsafe_allow_html=True)
 
@@ -226,7 +270,7 @@ def _init_state():
         "sf_diagnosis":            "",
         "turn_count":              0,
         # frontend state
-        "show_upload":             True,
+        "show_upload":             False,
         "waiting_feedback":        False,
         "input_key":               0,
     }
@@ -572,9 +616,9 @@ def sync_sf_knowledge() -> tuple[bool, str]:
 # ═══════════════════════════════════════════════════════════
 # AI HELPERS  — Groq primary, Claude/OpenAI optional fallback
 # ═══════════════════════════════════════════════════════════
-_GROQ_MODEL        = "llama-3.3-70b-versatile"        # primary — fast + capable (Phase 1-2)
-_GROQ_REASON_MODEL = "deepseek-r1-distill-llama-70b"  # reasoning model — Phase 3+ deep follow-ups
-_GROQ_FAST_MODEL   = "llama-3.1-8b-instant"          # tiny calls (classification, 1-word answers)
+_GROQ_MODEL        = "llama-3.3-70b-versatile"  # primary — fast + capable
+_GROQ_REASON_MODEL = "llama-3.3-70b-versatile"  # Phase 3 deep turns — same model + richer prompt
+_GROQ_FAST_MODEL   = "llama-3.1-8b-instant"     # tiny calls (classification, 1-word answers)
 _GROQ_VISION_MODEL = "llama-3.2-11b-vision-preview"  # image analysis
 
 # kept only as fallback constants (used if Groq key is missing)
@@ -932,7 +976,7 @@ def _reset_chat_state():
     st.session_state.help_count             = 0
     st.session_state.waiting_feedback       = False
     st.session_state.turn_count             = 0
-    st.session_state.show_upload            = True
+    st.session_state.show_upload            = False
     st.session_state.input_key              = st.session_state.get("input_key", 0) + 1
 
 
@@ -1142,12 +1186,14 @@ _CHAT_TMPL = _JTmpl("""
 """)
 
 _TYPING_HTML = """
-<div class="typing-row" style="max-width:860px;margin:0 auto;">
-  <div class="typing-av">🤖</div>
+<div class="typing-row" style="max-width:1200px;margin:0 auto;">
+  <div class="typing-av">W</div>
   <div class="typing-bubble">
-    <span class="typing-dot"></span>
-    <span class="typing-dot"></span>
-    <span class="typing-dot"></span>
+    <div class="typing-dots">
+      <span class="typing-dot"></span>
+      <span class="typing-dot"></span>
+      <span class="typing-dot"></span>
+    </div>
   </div>
 </div>
 """
@@ -1740,122 +1786,118 @@ def _build_case_knowledge(matches: list, query: str = "") -> tuple:
 def render_chat():
     st.markdown("""
 <style>
-/* ── Strip transforms so position:fixed navbar stays viewport-relative ── */
-html,body,#root,.stApp,
-[data-testid="stAppViewContainer"],
-[data-testid="stMain"],
-[data-testid="stMainBlockContainer"]{
-  transform:none!important;filter:none!important;
-  will-change:auto!important;contain:none!important;
+/* ══ FLEX LAYOUT — chatbar stays at bottom via flexbox, no position:fixed fighting ══ */
+/* Full height chain: every ancestor must be 100vh or the flex container won't fill the viewport */
+html,body,#root,.stApp,[data-testid="stApp"]{
+  height:100vh!important;margin:0!important;padding:0!important;overflow:hidden!important;
 }
 
-/* ── TRUE CHAT LAYOUT: flex column filling the full viewport ── */
-/* Same pattern used by ChatGPT / Claude / every production chat UI */
-html,body{height:100%!important;margin:0!important;padding:0!important;}
-#root,.stApp{height:100%!important;}
+/* The root flex column: stMain grows to fill space, chatbar sits at bottom as a natural flex item */
 [data-testid="stAppViewContainer"]{
-  display:flex!important;
-  flex-direction:column!important;
-  height:100vh!important;
-  overflow:hidden!important;
+  display:flex!important;flex-direction:column!important;
+  height:100vh!important;min-height:100vh!important;
+  overflow:hidden!important;background:#f0f2f5!important;
 }
 
-/* ── MESSAGES: grows to fill remaining space, scrolls internally ── */
+/* ══ NAVBAR — sticky within stMain scroll ══ */
+.chat-navbar{
+  position:sticky!important;top:0!important;z-index:9000!important;
+  background:#fff!important;border-bottom:1px solid #e5e7eb!important;
+  box-shadow:0 1px 8px rgba(0,0,0,.06)!important;
+  /* no left/right/width needed — sticky stays in flow */
+}
+
+/* ══ MESSAGES — fills all available space, scrolls internally ══ */
 [data-testid="stMain"]{
-  flex:1 1 auto!important;
-  min-height:0!important;
+  flex:1 1 0!important;min-height:0!important;
   overflow-y:auto!important;overflow-x:hidden!important;
-  position:relative!important;
-  top:unset!important;bottom:unset!important;
-  left:unset!important;right:unset!important;
+  background:#f0f2f5!important;
 }
-[data-testid="stMain"]::-webkit-scrollbar{width:4px;}
+[data-testid="stMain"]::-webkit-scrollbar{width:5px;}
 [data-testid="stMain"]::-webkit-scrollbar-track{background:transparent;}
-[data-testid="stMain"]::-webkit-scrollbar-thumb{background:#d1d5db;border-radius:4px;}
-[data-testid="stMain"]::-webkit-scrollbar-thumb:hover{background:#9ca3af;}
-[data-testid="stMain"]>div{
-  display:block!important;height:auto!important;min-height:unset!important;
-  padding:0!important;overflow:visible!important;
-}
-[data-testid="stMainBlockContainer"]{
-  height:auto!important;min-height:unset!important;max-height:none!important;
-  overflow:visible!important;flex:none!important;
-}
+[data-testid="stMain"]::-webkit-scrollbar-thumb{background:#c7d2fe;border-radius:10px;}
+[data-testid="stMainBlockContainer"],
+[data-testid="stMain"]>div{height:auto!important;min-height:unset!important;overflow:visible!important;}
 .block-container{
   background:transparent!important;box-shadow:none!important;border-radius:0!important;
-  max-width:880px!important;margin:0 auto!important;
-  padding:74px 16px 20px!important;
-  height:auto!important;min-height:unset!important;overflow:visible!important;
+  max-width:1200px!important;margin:0 auto!important;
+  padding:20px 24px 16px!important;overflow:visible!important;
 }
 
-/* ── NAVBAR: fixed to viewport top (no transform on ancestors → works fine) ── */
-.chat-navbar{
-  position:fixed!important;
-  top:0!important;left:0!important;right:0!important;
-  height:62px!important;z-index:99999!important;
-  background:#fff!important;
-  border-bottom:1px solid #e5e7eb!important;
-  box-shadow:0 1px 6px rgba(0,0,0,.07)!important;
-}
-
-/* ── CHATBAR: last flex child → always anchored at viewport bottom, no position:fixed needed ── */
+/* ══ CHATBAR — flex item pinned to bottom, CANNOT move ══ */
 [data-testid="stBottomBlockContainer"]{
-  flex-shrink:0!important;
-  width:100%!important;
-  background:#f0f0f5!important;
-  border-top:1px solid #e2e2ea!important;
-  padding:5px 16px 8px!important;
-  z-index:9999!important;
-  box-shadow:0 -1px 6px rgba(0,0,0,.06)!important;
+  flex:0 0 auto!important;width:100%!important;
+  position:relative!important;bottom:auto!important;
+  transform:none!important;will-change:auto!important;
+  background:#fff!important;border-top:1px solid #e5e7eb!important;
+  box-shadow:0 -2px 12px rgba(0,0,0,.06)!important;
+  padding:12px 28px!important;box-sizing:border-box!important;
+  z-index:100!important;overflow:hidden!important;
 }
+[data-testid="stBottomBlockContainer"] *::-webkit-scrollbar{display:none!important;width:0!important;}
+[data-testid="stBottomBlockContainer"] *{scrollbar-width:none!important;}
 
-/* ── COMPOSER PILL ── */
+/* Hide clutter */
+[data-testid="stChatInputHint"],[data-testid="stFooter"],[data-testid="stDecoration"],
+[data-testid="stStatusWidget"],footer,
+[data-testid="stBottomBlockContainer"] p,
+[data-testid="stBottomBlockContainer"] small{display:none!important;}
+
+/* ══ INPUT ══ */
 [data-testid="stChatInput"]{
-  background:#fff!important;
-  border:1px solid #e0e0e8!important;
-  border-radius:22px!important;
-  padding:2px 6px 2px 16px!important;
-  box-shadow:0 1px 3px rgba(0,0,0,.05)!important;
-  max-width:820px!important;
-  margin:0 auto!important;
-  min-height:36px!important;
+  background:#f9fafb!important;border:1.5px solid #e5e7eb!important;
+  border-radius:16px!important;
+  box-shadow:0 2px 8px rgba(0,0,0,.05)!important;
+  max-width:1200px!important;margin:0 auto!important;
+  padding:11px 50px 11px 46px!important;min-height:48px!important;
+  animation:none!important;position:relative!important;
+  transition:border-color .15s,box-shadow .15s,background .15s!important;
+  display:flex!important;align-items:center!important;
 }
 [data-testid="stChatInput"]:focus-within{
-  border-color:#7F77DD!important;
-  box-shadow:0 0 0 2px rgba(127,119,221,.15)!important;
+  background:#fff!important;border-color:#2563eb!important;
+  box-shadow:0 0 0 3px rgba(37,99,235,.10)!important;
 }
 [data-testid="stChatInput"] textarea{
   background:transparent!important;border:none!important;outline:none!important;
-  box-shadow:none!important;font-size:13px!important;
-  color:#374151!important;resize:none!important;
-  min-height:28px!important;max-height:80px!important;
-  padding:4px 0!important;line-height:1.4!important;
+  box-shadow:none!important;font-size:14.5px!important;color:#111827!important;
+  resize:none!important;min-height:22px!important;max-height:120px!important;
+  padding:0!important;line-height:1.6!important;
 }
-[data-testid="stChatInput"] textarea::placeholder{color:#9ca3af!important;font-size:13px!important;}
+[data-testid="stChatInput"] textarea::placeholder{color:#9ca3af!important;font-size:14.5px!important;}
 
-/* ── SEND BUTTON ── */
+/* ══ SEND BUTTON ══ */
 [data-testid="stChatInputSubmitButton"]{
-  background:#e8e8f0!important;border-radius:8px!important;
-  color:#6b7280!important;border:none!important;
-  width:28px!important;height:28px!important;min-width:28px!important;
-  padding:0!important;font-size:13px!important;
+  background:linear-gradient(135deg,#2563eb,#3b82f6)!important;
+  border-radius:10px!important;color:#fff!important;border:none!important;
+  width:34px!important;height:34px!important;min-width:34px!important;padding:0!important;
+  display:flex!important;align-items:center!important;justify-content:center!important;
+  transition:opacity .15s,transform .15s!important;flex-shrink:0!important;
+  box-shadow:0 2px 8px rgba(37,99,235,.30)!important;
 }
-[data-testid="stChatInputSubmitButton"]:hover{background:#534AB7!important;color:#fff!important;}
+[data-testid="stChatInputSubmitButton"]:hover{opacity:.88!important;transform:scale(1.05)!important;}
+[data-testid="stChatInputSubmitButton"]:disabled{
+  background:#e5e7eb!important;color:#9ca3af!important;box-shadow:none!important;transform:none!important;}
 
-/* ── In-chat buttons (feedback, toggle) ── */
+/* Hide native attach toggle */
+button[key="toggle_upload_btn"],
+[data-testid="stButton"]:has(button[key="toggle_upload_btn"]){display:none!important;}
+
+/* In-chat buttons */
 div.stButton>button{
-  background:#fff!important;color:#374151!important;
-  border:1px solid #d1d5db!important;border-radius:16px!important;
-  font-size:11px!important;font-weight:500!important;
-  padding:3px 11px!important;min-height:0!important;height:auto!important;
-  box-shadow:none!important;
+  background:#fff!important;color:#2563eb!important;
+  border:1.5px solid #e0e7ff!important;border-radius:9px!important;
+  font-size:12px!important;font-weight:500!important;
+  padding:5px 12px!important;min-height:0!important;height:auto!important;
+  box-shadow:0 1px 3px rgba(0,0,0,.05)!important;
 }
+div.stButton>button:hover{background:#eff6ff!important;border-color:#93c5fd!important;}
 div.stButton>button[kind="primary"]{
-  background:#534AB7!important;color:#fff!important;
-  border:none!important;border-radius:8px!important;
-  font-weight:600!important;font-size:11px!important;
+  background:linear-gradient(135deg,#2563eb,#3b82f6)!important;color:#fff!important;
+  border:none!important;border-radius:9px!important;font-weight:600!important;
+  box-shadow:0 2px 8px rgba(37,99,235,.25)!important;
 }
-div.stButton>button[kind="primary"]:hover{background:#4338ca!important;}
+div.stButton>button[kind="primary"]:hover{opacity:.9!important;}
 </style>
 """, unsafe_allow_html=True)
 
@@ -1866,7 +1908,10 @@ div.stButton>button[kind="primary"]:hover{background:#4338ca!important;}
 <div class="chat-navbar">
   <div class="cn-brand">
     <div class="cn-icon">🤖</div>
-    <span class="cn-title">AI Support Assistant</span>
+    <div class="cn-brand-info">
+      <span class="cn-title">AI Support Assistant</span>
+      <span class="cn-online">Online</span>
+    </div>
   </div>
   <span class="cn-portal">Support Portal</span>
   <div class="cn-user-wrap">
@@ -1875,7 +1920,6 @@ div.stButton>button[kind="primary"]:hover{background:#4338ca!important;}
       <span class="cn-user-co">{_company}</span>
     </div>
     <div class="cn-avatar">{_nav_init}</div>
-    <span class="cn-dots">···</span>
   </div>
 </div>
 """, unsafe_allow_html=True)
@@ -1978,23 +2022,24 @@ def _build_messages_html(messages, user_initials, date_str):
         if msg["role"] == "assistant":
             rows.append(f'''
 <div class="msg-row assistant{new_cls}">
-  <div class="msg-av bot">🤖</div>
-  <div class="bubble">{_md(msg["content"])}</div>
+  <div class="msg-av bot">W</div>
+  <div class="bot-text">{_md(msg["content"])}</div>
 </div>''')
         else:
             rows.append(f'''
 <div class="msg-row user{new_cls}">
-  <div class="bubble">{_h.escape(msg["content"])}</div>
-  <div class="msg-av user">{user_initials}</div>
+  <div class="user-bubble"><p style="margin:0;">{_h.escape(msg["content"])}</p></div>
 </div>''')
     return f'<div class="chat-msgs">{"".join(rows)}</div>'
 
 
 @st.fragment
 def _live_chat():
-    # Init upload-panel toggle
+    import streamlit.components.v1 as _cmp
+    from datetime import datetime
+
     if "show_upload" not in st.session_state:
-        st.session_state.show_upload = True
+        st.session_state.show_upload = False
 
     # Auto-welcome on very first load
     if not st.session_state.get("chat_started"):
@@ -2007,15 +2052,16 @@ def _live_chat():
         )
         st.session_state.messages.append({"role": "assistant", "content": welcome})
 
-    # Build + render message bubbles as HTML
-    from datetime import datetime
+    msgs = st.session_state.messages
+
+    # ── 1. PAST MESSAGES ────────────────────────────────────────
     _uname    = st.session_state.get("user", {}).get("name", "User")
     _initials = initials(_uname)
     _now      = datetime.now().strftime("Today, %I:%M %p").lstrip("0")
-    st.markdown(_build_messages_html(st.session_state.messages, _initials, _now), unsafe_allow_html=True)
+    st.markdown(_build_messages_html(msgs, _initials, _now), unsafe_allow_html=True)
 
-    # Inline images from file uploads
-    for msg in st.session_state.messages:
+    # Inline images attached to messages
+    for msg in msgs:
         fdata = msg.get("file")
         if fdata and fdata["type"] == "image":
             st.image(
@@ -2023,13 +2069,21 @@ def _live_chat():
                 caption=fdata["name"], width=260,
             )
 
-    # Resolution popup + L1/L2 action buttons
-    msgs = st.session_state.messages
+    # ── 2. TYPING / STREAM SLOTS — declared HERE so they sit above the chatbar ──
+    # Streamlit assigns render positions at declaration time, not at population time.
+    # Declaring these before st.chat_input() guarantees they render inside the
+    # scrollable messages area, not inside the bottom bar.
+    _typing_slot = st.empty()
+    _stream_slot = st.empty()
+    st.session_state["_typing_slot"] = _typing_slot
+    st.session_state["_stream_slot"] = _stream_slot
+
+    # ── 3. RESOLUTION POPUP ─────────────────────────────────────
     if msgs and msgs[-1]["role"] == "assistant" and len(msgs) >= 2:
         if st.session_state.get("show_resolution_popup") and not st.session_state.get("resolution_check_shown"):
             _show_resolution_dialog()
 
-    # ── Feedback card ("Did this resolve your issue?")
+    # ── 4. FEEDBACK CARD ────────────────────────────────────────
     if st.session_state.get("waiting_feedback") and msgs and msgs[-1]["role"] == "assistant":
         st.markdown("""
 <div class="fb-card">
@@ -2049,7 +2103,7 @@ def _live_chat():
                 st.session_state.page = "escalated"
                 st.rerun(scope="app")
 
-    # ── Upload card (dashed #c4b5fd border, uc-card layout) — in scrollable area
+    # ── 5. UPLOAD CARD ──────────────────────────────────────────
     uploaded = None
     if st.session_state.show_upload:
         st.markdown("""
@@ -2066,34 +2120,139 @@ def _live_chat():
             key=f"fu_{st.session_state.fu_key}",
         )
 
-    # ── Toggle button
-    toggle_label = "Hide upload panel" if st.session_state.show_upload else "Show upload panel"
-    if st.button(toggle_label, key="toggle_upload_btn"):
+    # Minimal attachment toggle — just a small icon link, not a full button
+    _toggle_icon = "📎 Hide attachment" if st.session_state.show_upload else "📎 Attach file"
+    st.markdown(
+        f'<div style="text-align:right;max-width:1140px;margin:2px auto 0;padding-right:4px;">'
+        f'</div>',
+        unsafe_allow_html=True,
+    )
+    if st.button(_toggle_icon, key="toggle_upload_btn"):
         st.session_state.show_upload = not st.session_state.show_upload
         st.rerun()
 
-    # ── Auto-scroll the stMain container to show the latest message
-    import streamlit.components.v1 as _cmp
+    # ── 6. FLEX ENFORCEMENT + PAPERCLIP + AUTO-SCROLL ───────────
     _cmp.html("""
 <script>
 (function(){
-  try{
-    var main = window.parent.document.querySelector('[data-testid="stMain"]');
-    if(main) main.scrollTop = main.scrollHeight;
-  }catch(e){}
+  var w = window.parent;
+  var p = w.document;
+
+  function pin(el, props){
+    if(!el) return;
+    for(var k in props) el.style.setProperty(k, props[k], 'important');
+  }
+
+  /* Enforce the flex-column layout.
+     Every ancestor of stAppViewContainer must be height:100vh — if any shrinks,
+     the flex container won't fill the viewport and the chatbar drifts up.
+     stMain grows to fill all remaining space (flex:1 1 0).
+     stBottomBlockContainer is a natural flex item at the bottom — it CANNOT move. */
+  function applyFlex(){
+    var html = p.documentElement;
+    var body = p.body;
+    var root = p.getElementById('root');
+    var app  = p.querySelector('.stApp') || p.querySelector('[data-testid="stApp"]');
+    var avc  = p.querySelector('[data-testid="stAppViewContainer"]');
+    var main = p.querySelector('[data-testid="stMain"]');
+    var mbc  = p.querySelector('[data-testid="stMainBlockContainer"]');
+    var foot = p.querySelector('[data-testid="stBottomBlockContainer"]');
+
+    // Full height chain — every ancestor must be 100vh
+    [html, body, root, app].forEach(function(el){
+      pin(el,{height:'100vh',overflow:'hidden',margin:'0',padding:'0'});
+    });
+    if(avc) pin(avc,{
+      display:'flex','flex-direction':'column',
+      height:'100vh','min-height':'100vh',overflow:'hidden'
+    });
+    if(main) pin(main,{
+      flex:'1 1 0','min-height':'0',
+      'overflow-y':'auto','overflow-x':'hidden'
+    });
+    if(mbc) pin(mbc,{overflow:'visible','min-height':'unset'});
+    if(foot) pin(foot,{
+      flex:'0 0 auto',width:'100%',
+      position:'relative',bottom:'auto',
+      transform:'none','will-change':'auto','z-index':'100'
+    });
+  }
+
+  function injectClip(){
+    var inp = p.querySelector('[data-testid="stChatInput"]');
+    if(!inp || p.getElementById('wsa-clip')) return;
+    var clip = p.createElement('button');
+    clip.id = 'wsa-clip';
+    clip.title = 'Attach file';
+    clip.innerHTML = '<svg width="18" height="18" viewBox="0 0 24 24" fill="none"'+
+      ' stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">'+
+      '<path d="M21.44 11.05l-9.19 9.19a6 6 0 01-8.49-8.49l9.19-9.19a4 4 0 015.66 5.66'+
+      'l-9.2 9.19a2 2 0 01-2.83-2.83l8.49-8.48"/></svg>';
+    clip.style.cssText='position:absolute;left:12px;top:50%;transform:translateY(-50%);'+
+      'background:none;border:none;cursor:pointer;padding:6px;border-radius:8px;'+
+      'color:#9ca3af;display:flex;align-items:center;justify-content:center;'+
+      'transition:color .15s,background .15s;z-index:10;line-height:0';
+    clip.onmouseover=function(){this.style.color='#2563eb';this.style.background='rgba(37,99,235,.08)';};
+    clip.onmouseout =function(){this.style.color='#9ca3af';this.style.background='none';};
+    clip.onclick=function(e){
+      e.preventDefault();e.stopPropagation();
+      var btns=p.querySelectorAll('[data-testid="stButton"] button');
+      for(var i=0;i<btns.length;i++){
+        var t=btns[i].textContent||'';
+        if(t.indexOf('Attach')>-1||t.indexOf('Hide')>-1){btns[i].click();break;}
+      }
+    };
+    inp.style.setProperty('position','relative','important');
+    inp.appendChild(clip);
+  }
+
+  function scrollToBottom(){
+    var m=p.querySelector('[data-testid="stMain"]');
+    if(m) m.scrollTop=m.scrollHeight;
+  }
+
+  // Apply immediately
+  applyFlex(); injectClip(); scrollToBottom();
+
+  // Watch stBottomBlockContainer: if Streamlit resets its style, re-apply flex props instantly
+  function watchFoot(){
+    var foot=p.querySelector('[data-testid="stBottomBlockContainer"]');
+    if(!foot||foot.__flexGuarded) return;
+    foot.__flexGuarded=true;
+    new w.MutationObserver(function(){
+      pin(foot,{flex:'0 0 auto',width:'100%',
+        position:'relative',bottom:'auto',transform:'none','will-change':'auto'});
+    }).observe(foot,{attributes:true,attributeFilter:['style','class']});
+  }
+
+  // Watch for Streamlit <style> tag injections in <head> — Emotion CSS re-injection
+  new w.MutationObserver(function(){ applyFlex(); }).observe(p.head,{childList:true});
+
+  // Watch for DOM rerenders (new nodes added anywhere under the app)
+  new w.MutationObserver(function(muts){
+    var changed=false;
+    muts.forEach(function(m){if(m.addedNodes.length) changed=true;});
+    if(changed){ applyFlex(); watchFoot(); injectClip(); scrollToBottom(); }
+  }).observe(p.querySelector('[data-testid="stAppViewContainer"]')||p.body,
+    {childList:true,subtree:true});
+
+  watchFoot();
+
+  // Backup poll at 300ms (belt-and-suspenders)
+  setInterval(function(){ applyFlex(); watchFoot(); injectClip(); },300);
 })();
 </script>""", height=0)
 
-    # ── Chat input — Streamlit places this at the bottom of the screen automatically
+    # ── 7. CHAT INPUT (always at the bottom via stBottomBlockContainer) ──
     user_input = st.chat_input("Ask Anything...")
 
-    # Handle send (text message or file upload)
+    # ── 8. HANDLE SEND ──────────────────────────────────────────
     if user_input or uploaded:
-        text = (user_input or "").strip()
+        text      = (user_input or "").strip()
         file_data = _process_upload(uploaded) if uploaded else None
         user_msg  = {"role": "user", "content": text}
-        fname = uploaded.name if uploaded else ""
-        ftype = (file_data or {}).get("type", "")
+        fname     = uploaded.name if uploaded else ""
+        ftype     = (file_data or {}).get("type", "")
         if file_data:
             user_msg["file"] = file_data
         if not st.session_state.issue_text:
@@ -2107,13 +2266,9 @@ def _live_chat():
         if sid:
             support_db.save_message(sid, "user", text, fname, ftype)
 
-        _typing_slot = st.empty()
+        # Populate the pre-declared slots (they are already in the messages area)
         _typing_slot.markdown(_TYPING_HTML, unsafe_allow_html=True)
-        # Scroll stMain so typing indicator is visible above the chatbar
         _cmp.html("""<script>(function(){try{var m=window.parent.document.querySelector('[data-testid="stMain"]');if(m)m.scrollTop=m.scrollHeight;}catch(e){}})()</script>""", height=0)
-        _stream_slot = st.empty()
-        st.session_state["_stream_slot"] = _stream_slot
-        st.session_state["_typing_slot"] = _typing_slot
 
         reply = process_chat(text, st.session_state.messages, file_data)
 
@@ -2126,7 +2281,6 @@ def _live_chat():
         if sid:
             support_db.save_message(sid, "assistant", reply)
 
-        # Increment turn count; show feedback only after 3 exchanges
         st.session_state.turn_count = st.session_state.get("turn_count", 0) + 1
         if st.session_state.turn_count >= 3:
             st.session_state.waiting_feedback = True

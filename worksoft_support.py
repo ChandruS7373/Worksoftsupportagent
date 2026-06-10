@@ -829,8 +829,38 @@ def _ask_groq(
         return raw
     except Exception as e:
         import traceback
-        print(f"[Groq error] {e}\n{traceback.format_exc()}")
+        _err = str(e)
+        print(f"[Groq error] {_err}\n{traceback.format_exc()}")
+        # Store the real error so the UI can surface it
+        try:
+            st.session_state["_last_ai_error"] = _err
+        except Exception:
+            pass
         return _ask_claude_fallback(system_prompt, user_prompt, max_tokens, history, fast, stream, temperature)
+
+
+def _ai_connection_error() -> str:
+    """Return a friendly error message that includes the real API error when available."""
+    last = st.session_state.get("_last_ai_error", "")
+    hint = ""
+    if last:
+        low = last.lower()
+        if "401" in last or "invalid_api_key" in low or "authentication" in low:
+            hint = "\n\n🔑 **Cause:** Invalid or expired API key."
+        elif "429" in last or "rate_limit" in low or "rate limit" in low:
+            hint = "\n\n⏱️ **Cause:** Rate limit reached — wait a moment and try again."
+        elif "connection" in low or "timeout" in low or "network" in low:
+            hint = "\n\n🌐 **Cause:** Network / connection error — check your internet."
+        elif "model" in low and ("not found" in low or "does not exist" in low):
+            hint = f"\n\n🤖 **Cause:** Model not found. Check `_GROQ_MODEL` in the code.\n`{last}`"
+        else:
+            hint = f"\n\n⚠️ **Error:** `{last}`"
+    return (
+        "❌ **I'm having trouble connecting to the AI right now.**"
+        + hint
+        + "\n\n**Fix:** Open `.streamlit/secrets.toml`, verify your `GROQ_API_KEY` is correct, then restart the app.\n"
+        "Get a free key at [console.groq.com](https://console.groq.com)."
+    )
 
 
 def _ask_ai(system_prompt: str, user_prompt: str, max_tokens: int = 800,
@@ -1725,7 +1755,7 @@ HARD RULES:
         stream=True,
         temperature=0.15,
         model_override=_model,
-    ) or "I'm having trouble connecting to the AI right now. Please check your API key in `.streamlit/secrets.toml` and restart."
+    ) or _ai_connection_error()
 
     st.session_state.chat_phase = "resolving"
 
@@ -1824,14 +1854,15 @@ html,body,#root,.stApp,[data-testid="stApp"]{
   padding:20px 24px 16px!important;overflow:visible!important;
 }
 
-/* ══ CHATBAR — flex item pinned to bottom, CANNOT move ══ */
+/* ══ CHATBAR WRAPPER — flex item pinned to bottom, CANNOT move ══ */
 [data-testid="stBottomBlockContainer"]{
   flex:0 0 auto!important;width:100%!important;
   position:relative!important;bottom:auto!important;
   transform:none!important;will-change:auto!important;
-  background:#fff!important;border-top:1px solid #e5e7eb!important;
-  box-shadow:0 -2px 12px rgba(0,0,0,.06)!important;
-  padding:16px 28px!important;box-sizing:border-box!important;
+  background:linear-gradient(to top,#f0f4ff,#ffffff)!important;
+  border-top:none!important;
+  box-shadow:0 -4px 24px rgba(37,99,235,.08),0 -1px 0 rgba(37,99,235,.06)!important;
+  padding:14px 36px 18px!important;box-sizing:border-box!important;
   z-index:100!important;overflow:hidden!important;
 }
 [data-testid="stBottomBlockContainer"] *::-webkit-scrollbar{display:none!important;width:0!important;}
@@ -1843,41 +1874,52 @@ html,body,#root,.stApp,[data-testid="stApp"]{
 [data-testid="stBottomBlockContainer"] p,
 [data-testid="stBottomBlockContainer"] small{display:none!important;}
 
-/* ══ INPUT ══ */
+/* ══ INPUT BOX ══ */
 [data-testid="stChatInput"]{
-  background:#f9fafb!important;border:1.5px solid #e5e7eb!important;
-  border-radius:16px!important;
-  box-shadow:0 2px 8px rgba(0,0,0,.05)!important;
+  background:#ffffff!important;
+  border:2px solid #e0e7ff!important;
+  border-radius:28px!important;
+  box-shadow:0 4px 20px rgba(37,99,235,.10),0 1px 4px rgba(0,0,0,.04)!important;
   max-width:1200px!important;margin:0 auto!important;
-  padding:14px 56px 14px 52px!important;min-height:58px!important;
+  padding:16px 60px 16px 56px!important;min-height:64px!important;
   animation:none!important;position:relative!important;
-  transition:border-color .15s,box-shadow .15s,background .15s!important;
+  transition:border-color .2s,box-shadow .2s!important;
   display:flex!important;align-items:center!important;
 }
 [data-testid="stChatInput"]:focus-within{
-  background:#fff!important;border-color:#2563eb!important;
-  box-shadow:0 0 0 3px rgba(37,99,235,.10)!important;
+  background:#fff!important;
+  border-color:#2563eb!important;
+  box-shadow:0 4px 24px rgba(37,99,235,.18),0 0 0 4px rgba(37,99,235,.08)!important;
 }
 [data-testid="stChatInput"] textarea{
   background:transparent!important;border:none!important;outline:none!important;
-  box-shadow:none!important;font-size:15.5px!important;color:#111827!important;
-  resize:none!important;min-height:28px!important;max-height:140px!important;
-  padding:0!important;line-height:1.6!important;
+  box-shadow:none!important;font-size:15.5px!important;color:#1e293b!important;
+  resize:none!important;min-height:52px!important;max-height:160px!important;
+  padding:0!important;line-height:1.7!important;height:52px!important;
+  font-weight:400!important;letter-spacing:.01em!important;
 }
-[data-testid="stChatInput"] textarea::placeholder{color:#9ca3af!important;font-size:15.5px!important;}
+[data-testid="stChatInput"] textarea::placeholder{
+  color:#a0aec0!important;font-size:15.5px!important;font-style:italic!important;
+}
 
-/* ══ SEND BUTTON ══ */
+/* ══ SEND BUTTON — circle ══ */
 [data-testid="stChatInputSubmitButton"]{
-  background:linear-gradient(135deg,#2563eb,#3b82f6)!important;
-  border-radius:10px!important;color:#fff!important;border:none!important;
-  width:34px!important;height:34px!important;min-width:34px!important;padding:0!important;
+  background:linear-gradient(135deg,#2563eb,#6366f1)!important;
+  border-radius:50%!important;color:#fff!important;border:none!important;
+  width:42px!important;height:42px!important;min-width:42px!important;padding:0!important;
   display:flex!important;align-items:center!important;justify-content:center!important;
-  transition:opacity .15s,transform .15s!important;flex-shrink:0!important;
-  box-shadow:0 2px 8px rgba(37,99,235,.30)!important;
+  transition:transform .18s,box-shadow .18s,opacity .18s!important;flex-shrink:0!important;
+  box-shadow:0 4px 14px rgba(37,99,235,.40)!important;
 }
-[data-testid="stChatInputSubmitButton"]:hover{opacity:.88!important;transform:scale(1.05)!important;}
+[data-testid="stChatInputSubmitButton"]:hover{
+  transform:scale(1.08)!important;
+  box-shadow:0 6px 20px rgba(37,99,235,.50)!important;
+}
+[data-testid="stChatInputSubmitButton"]:active{transform:scale(.96)!important;}
 [data-testid="stChatInputSubmitButton"]:disabled{
-  background:#e5e7eb!important;color:#9ca3af!important;box-shadow:none!important;transform:none!important;}
+  background:#e2e8f0!important;color:#94a3b8!important;
+  box-shadow:none!important;transform:none!important;
+}
 
 /* Hide native attach toggle */
 button[key="toggle_upload_btn"],

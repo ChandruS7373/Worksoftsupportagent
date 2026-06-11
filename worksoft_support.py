@@ -1854,15 +1854,18 @@ html,body,#root,.stApp,[data-testid="stApp"]{
   padding:20px 24px 16px!important;overflow:visible!important;
 }
 
-/* ══ CHATBAR WRAPPER — flex item pinned to bottom, CANNOT move ══ */
+/* ══ CHATBAR WRAPPER — glassmorphism floating bar ══ */
 [data-testid="stBottomBlockContainer"]{
   flex:0 0 auto!important;width:100%!important;
   position:relative!important;bottom:auto!important;
   transform:none!important;will-change:auto!important;
-  background:linear-gradient(to top,#f0f4ff,#ffffff)!important;
-  border-top:none!important;
-  box-shadow:0 -4px 24px rgba(37,99,235,.08),0 -1px 0 rgba(37,99,235,.06)!important;
-  padding:14px 36px 18px!important;box-sizing:border-box!important;
+  /* frosted glass overcoat */
+  background:rgba(255,255,255,0.72)!important;
+  backdrop-filter:blur(18px) saturate(180%)!important;
+  -webkit-backdrop-filter:blur(18px) saturate(180%)!important;
+  border-top:1px solid rgba(99,102,241,0.12)!important;
+  box-shadow:0 -8px 32px rgba(37,99,235,.09),0 -1px 0 rgba(99,102,241,.10)!important;
+  padding:10px 16px 12px!important;box-sizing:border-box!important;
   z-index:100!important;overflow:hidden!important;
 }
 [data-testid="stBottomBlockContainer"] *::-webkit-scrollbar{display:none!important;width:0!important;}
@@ -1874,48 +1877,48 @@ html,body,#root,.stApp,[data-testid="stApp"]{
 [data-testid="stBottomBlockContainer"] p,
 [data-testid="stBottomBlockContainer"] small{display:none!important;}
 
-/* ══ INPUT BOX ══ */
+/* ══ INPUT BOX — compact glass pill ══ */
 [data-testid="stChatInput"]{
-  background:#ffffff!important;
-  border:2px solid #e0e7ff!important;
-  border-radius:28px!important;
-  box-shadow:0 4px 20px rgba(37,99,235,.10),0 1px 4px rgba(0,0,0,.04)!important;
-  max-width:1200px!important;margin:0 auto!important;
-  padding:16px 60px 16px 56px!important;min-height:64px!important;
+  background:rgba(255,255,255,0.90)!important;
+  border:1.5px solid rgba(99,102,241,0.22)!important;
+  border-radius:999px!important;
+  box-shadow:0 2px 12px rgba(37,99,235,.08),inset 0 1px 0 rgba(255,255,255,.9)!important;
+  width:98%!important;max-width:98%!important;margin:0 auto!important;
+  padding:12px 52px 12px 46px!important;min-height:58px!important;
   animation:none!important;position:relative!important;
-  transition:border-color .2s,box-shadow .2s!important;
+  transition:border-color .2s,box-shadow .2s,background .2s!important;
   display:flex!important;align-items:center!important;
 }
 [data-testid="stChatInput"]:focus-within{
-  background:#fff!important;
-  border-color:#2563eb!important;
-  box-shadow:0 4px 24px rgba(37,99,235,.18),0 0 0 4px rgba(37,99,235,.08)!important;
+  background:rgba(255,255,255,1)!important;
+  border-color:#6366f1!important;
+  box-shadow:0 2px 16px rgba(99,102,241,.18),0 0 0 3px rgba(99,102,241,.10)!important;
 }
 [data-testid="stChatInput"] textarea{
   background:transparent!important;border:none!important;outline:none!important;
-  box-shadow:none!important;font-size:15.5px!important;color:#1e293b!important;
-  resize:none!important;min-height:52px!important;max-height:160px!important;
-  padding:0!important;line-height:1.7!important;height:52px!important;
+  box-shadow:none!important;font-size:14.5px!important;color:#1e293b!important;
+  resize:none!important;min-height:42px!important;max-height:140px!important;
+  padding:0!important;line-height:1.6!important;height:42px!important;
   font-weight:400!important;letter-spacing:.01em!important;
 }
 [data-testid="stChatInput"] textarea::placeholder{
-  color:#a0aec0!important;font-size:15.5px!important;font-style:italic!important;
+  color:#94a3b8!important;font-size:14.5px!important;
 }
 
-/* ══ SEND BUTTON — circle ══ */
+/* ══ SEND BUTTON — compact glowing circle ══ */
 [data-testid="stChatInputSubmitButton"]{
-  background:linear-gradient(135deg,#2563eb,#6366f1)!important;
+  background:linear-gradient(135deg,#4f46e5,#2563eb)!important;
   border-radius:50%!important;color:#fff!important;border:none!important;
-  width:42px!important;height:42px!important;min-width:42px!important;padding:0!important;
+  width:34px!important;height:34px!important;min-width:34px!important;padding:0!important;
   display:flex!important;align-items:center!important;justify-content:center!important;
-  transition:transform .18s,box-shadow .18s,opacity .18s!important;flex-shrink:0!important;
-  box-shadow:0 4px 14px rgba(37,99,235,.40)!important;
+  transition:transform .15s,box-shadow .15s!important;flex-shrink:0!important;
+  box-shadow:0 2px 10px rgba(79,70,229,.45)!important;
 }
 [data-testid="stChatInputSubmitButton"]:hover{
-  transform:scale(1.08)!important;
-  box-shadow:0 6px 20px rgba(37,99,235,.50)!important;
+  transform:scale(1.10)!important;
+  box-shadow:0 4px 16px rgba(79,70,229,.60)!important;
 }
-[data-testid="stChatInputSubmitButton"]:active{transform:scale(.96)!important;}
+[data-testid="stChatInputSubmitButton"]:active{transform:scale(.94)!important;}
 [data-testid="stChatInputSubmitButton"]:disabled{
   background:#e2e8f0!important;color:#94a3b8!important;
   box-shadow:none!important;transform:none!important;
